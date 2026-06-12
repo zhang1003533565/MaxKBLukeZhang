@@ -71,6 +71,17 @@
               class="w-full"
             />
           </el-form-item>
+
+          <el-form-item :label="$t('views.knowledge.chatTest.responseMode')">
+            <el-radio-group v-model="form.response_mode" class="response-mode-group">
+              <el-radio-button label="stream">
+                {{ $t('views.knowledge.chatTest.streamMode') }}
+              </el-radio-button>
+              <el-radio-button label="normal">
+                {{ $t('views.knowledge.chatTest.normalMode') }}
+              </el-radio-button>
+            </el-radio-group>
+          </el-form-item>
         </el-form>
 
         <el-button class="w-full" @click="clearMessages">
@@ -132,7 +143,7 @@
 
 <script lang="ts" setup>
 import { nextTick, onMounted, reactive, ref } from 'vue'
-import { MsgWarning } from '@/utils/message'
+import { MsgError, MsgWarning } from '@/utils/message'
 import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
 import { arraySort } from '@/utils/array'
 import { t } from '@/locales'
@@ -162,6 +173,7 @@ const form = reactive({
   top_number: 5,
   similarity: 0.6,
   search_mode: 'blend',
+  response_mode: 'stream',
 })
 
 function createId() {
@@ -215,7 +227,143 @@ function buildAssistantContent(list: any[]) {
   return t('views.knowledge.chatTest.referenceSummary', { count: list.length })
 }
 
-function sendMessage(event?: KeyboardEvent | MouseEvent) {
+type StreamEvent = {
+  event: string
+  data: string
+}
+
+function parseStreamEvents(buffer: string) {
+  const blocks = buffer.replace(/\r\n/g, '\n').split('\n\n')
+  const rest = blocks.pop() || ''
+  const events = blocks
+    .map((block) => {
+      const event: StreamEvent = { event: 'message', data: '' }
+      block.split('\n').forEach((line) => {
+        if (line.startsWith('event:')) {
+          event.event = line.slice(6).trim()
+        }
+        if (line.startsWith('data:')) {
+          event.data += line.slice(5).trim()
+        }
+      })
+      return event
+    })
+    .filter((item) => item.data)
+  return { events, rest }
+}
+
+function readStreamData(data: string) {
+  try {
+    return JSON.parse(data)
+  } catch {
+    return data
+  }
+}
+
+function buildChatPayload(text: string) {
+  return {
+    knowledge_id_list: form.knowledge_id_list,
+    llm_model_id: form.llm_model_id,
+    top_number: form.top_number,
+    similarity: form.similarity,
+    search_mode: form.search_mode,
+    query_text: text,
+  }
+}
+
+function updateAssistantMessage(index: number, values: Partial<ChatMessage>) {
+  messages.value[index] = {
+    ...messages.value[index],
+    ...values,
+  }
+}
+
+function updateAssistantReferences(index: number, references: any[]) {
+  updateAssistantMessage(index, {
+    references,
+  })
+}
+
+function updateAssistantContent(index: number, content: string) {
+  updateAssistantMessage(index, {
+    content,
+  })
+}
+
+function appendAssistantContent(index: number, content: string) {
+  updateAssistantContent(index, `${messages.value[index].content}${content}`)
+}
+
+async function sendNormalMessage(payload: ReturnType<typeof buildChatPayload>, assistantIndex: number) {
+  const res = await loadSharedApi({ type: 'knowledge', systemType: 'workspace' })
+    .postKnowledgeChatTest(payload)
+  const references = Array.isArray(res.data?.references)
+    ? arraySort(res.data.references, 'comprehensive_score', true)
+    : []
+  updateAssistantMessage(assistantIndex, {
+    content: res.data?.answer || buildAssistantContent(references),
+    references,
+  })
+}
+
+async function sendStreamMessage(payload: ReturnType<typeof buildChatPayload>, assistantIndex: number) {
+  const response = await loadSharedApi({ type: 'knowledge', systemType: 'workspace' })
+    .postKnowledgeChatTestStream(payload)
+  if (!response.ok || !response.body) {
+    throw new Error(await response.text())
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let hasAnswer = false
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    const parsed = parseStreamEvents(buffer)
+    buffer = parsed.rest
+    parsed.events.forEach((streamEvent) => {
+      const data = readStreamData(streamEvent.data)
+      if (streamEvent.event === 'references') {
+        const references = Array.isArray(data)
+          ? arraySort(data, 'comprehensive_score', true)
+          : []
+        updateAssistantReferences(assistantIndex, references)
+        if (!hasAnswer) {
+          updateAssistantContent(assistantIndex, buildAssistantContent(references))
+        }
+      }
+      if (streamEvent.event === 'answer') {
+        if (!hasAnswer) {
+          updateAssistantContent(assistantIndex, '')
+          hasAnswer = true
+        }
+        appendAssistantContent(assistantIndex, String(data))
+      }
+      if (streamEvent.event === 'error') {
+        throw new Error(String(data))
+      }
+    })
+    scrollToBottom()
+  }
+
+  const parsed = parseStreamEvents(buffer)
+  parsed.events.forEach((streamEvent) => {
+    const data = readStreamData(streamEvent.data)
+    if (streamEvent.event === 'answer') {
+      if (!hasAnswer) {
+        updateAssistantContent(assistantIndex, '')
+        hasAnswer = true
+      }
+      appendAssistantContent(assistantIndex, String(data))
+    }
+  })
+}
+
+async function sendMessage(event?: KeyboardEvent | MouseEvent) {
   if (event) {
     if (event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
       return
@@ -234,27 +382,30 @@ function sendMessage(event?: KeyboardEvent | MouseEvent) {
   if (!text || loading.value) return
 
   messages.value.push({ id: createId(), role: 'user', content: text })
+  const assistantIndex = messages.value.push({
+    id: createId(),
+    role: 'assistant',
+    content: '',
+    references: [],
+  }) - 1
   question.value = ''
   scrollToBottom()
   loading.value = true
-  loadSharedApi({ type: 'knowledge', systemType: 'workspace' })
-    .postKnowledgeChatTest(
-      {
-        ...form,
-        query_text: text,
-      },
-      loading,
-    )
-    .then((res: any) => {
-      const references = arraySort(res.data?.references || [], 'comprehensive_score', true)
-      messages.value.push({
-        id: createId(),
-        role: 'assistant',
-        content: res.data?.answer || buildAssistantContent(references),
-        references,
-      })
-      scrollToBottom()
-    })
+  try {
+    const payload = buildChatPayload(text)
+    if (form.response_mode === 'stream') {
+      await sendStreamMessage(payload, assistantIndex)
+    } else {
+      await sendNormalMessage(payload, assistantIndex)
+    }
+  } catch (error: any) {
+    const message = error?.message || String(error)
+    updateAssistantContent(assistantIndex, message)
+    MsgError(message)
+  } finally {
+    loading.value = false
+    scrollToBottom()
+  }
 }
 
 function loadKnowledgeList() {
@@ -314,6 +465,16 @@ onMounted(() => {
   width: 100%;
   :deep(.el-radio-button) {
     width: 33.333%;
+  }
+  :deep(.el-radio-button__inner) {
+    width: 100%;
+  }
+}
+
+.response-mode-group {
+  width: 100%;
+  :deep(.el-radio-button) {
+    width: 50%;
   }
   :deep(.el-radio-button__inner) {
     width: 100%;

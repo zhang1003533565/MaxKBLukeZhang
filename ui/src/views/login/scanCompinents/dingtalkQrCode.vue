@@ -106,7 +106,7 @@ const initActive = async () => {
       (loginResult) => {
         const authCode = loginResult.authCode
         login.dingCallback(authCode).then(() => {
-          router.push({ name: 'home' })
+          router.push('/knowledge')
         })
       },
       (errorMsg: string) => {

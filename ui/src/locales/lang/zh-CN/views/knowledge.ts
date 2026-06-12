@@ -125,6 +125,9 @@ export default {
     greeting: '可以开始提问。',
     noReference: '没有找到相关内容。',
     referenceSummary: '找到 {count} 条相关内容。',
+    responseMode: '返回模式',
+    streamMode: '流式返回',
+    normalMode: '普通返回',
     clear: '清空对话',
   },
   customSegmentation: {

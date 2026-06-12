@@ -18,6 +18,7 @@ urlpatterns = [
     path('workspace/<str:workspace_id>/knowledge/import_knowledge', views.KnowledgeView.ImportKnowledge.as_view()),
     path('workspace/<str:workspace_id>/knowledge/hit_test', views.KnowledgeView.BatchHitTest.as_view()),
     path('workspace/<str:workspace_id>/knowledge/chat_test', views.KnowledgeView.BatchChatTest.as_view()),
+    path('workspace/<str:workspace_id>/knowledge/chat_test/stream', views.KnowledgeView.BatchChatTestStream.as_view()),
     path('workspace/<str:workspace_id>/knowledge/<str:knowledge_id>', views.KnowledgeView.Operate.as_view()),
     path('workspace/<str:workspace_id>/knowledge/<str:knowledge_id>/generate_related', views.KnowledgeView.GenerateRelated.as_view()),
     path('workspace/<str:workspace_id>/knowledge/<str:knowledge_id>/embedding', views.KnowledgeView.Embedding.as_view()),

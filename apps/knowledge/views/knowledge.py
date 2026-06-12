@@ -1,4 +1,5 @@
 from django.utils.translation import gettext_lazy as _
+from django.http import StreamingHttpResponse
 from drf_spectacular.utils import extend_schema
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
@@ -324,6 +325,41 @@ class KnowledgeView(APIView):
     class BatchChatTest(APIView):
         authentication_classes = [TokenAuth]
 
+        @staticmethod
+        def get_permitted_ids(request: Request, workspace_id: str):
+            knowledge_id_list = request.data.get('knowledge_id_list', [])
+            return check_batch_permissions(
+                request,
+                knowledge_id_list,
+                'knowledge_id',
+                (
+                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_knowledge_permission(),
+                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_permission_workspace_manage_role(),
+                    ViewPermission(
+                        [RoleConstants.USER.get_workspace_role()],
+                        [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                        CompareConstants.AND
+                    ),
+                    RoleConstants.WORKSPACE_MANAGE.get_workspace_role()
+                ),
+                workspace_id=workspace_id
+            )
+
+        @staticmethod
+        def get_chat_serializer(request: Request, workspace_id: str, permitted_ids):
+            return KnowledgeSerializer.BatchChatTest(
+                data={
+                    'workspace_id': workspace_id,
+                    'knowledge_id_list': permitted_ids,
+                    'user_id': request.user.id,
+                    'llm_model_id': request.data.get('llm_model_id'),
+                    'query_text': request.data.get('query_text'),
+                    'top_number': request.data.get('top_number'),
+                    'similarity': request.data.get('similarity'),
+                    'search_mode': request.data.get('search_mode')
+                }
+            )
+
         @extend_schema(
             methods=['POST'],
             summary=_('Knowledge chat test'),
@@ -340,35 +376,42 @@ class KnowledgeView(APIView):
             RoleConstants.USER.get_workspace_role()
         )
         def post(self, request: Request, workspace_id: str):
-            knowledge_id_list = request.data.get('knowledge_id_list', [])
-            permitted_ids = check_batch_permissions(
-                request,
-                knowledge_id_list,
-                'knowledge_id',
-                (
-                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_knowledge_permission(),
-                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_permission_workspace_manage_role(),
-                    ViewPermission(
-                        [RoleConstants.USER.get_workspace_role()],
-                        [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
-                        CompareConstants.AND
-                    ),
-                    RoleConstants.WORKSPACE_MANAGE.get_workspace_role()
-                ),
-                workspace_id=workspace_id
+            return result.success(
+                self.get_chat_serializer(
+                    request,
+                    workspace_id,
+                    self.get_permitted_ids(request, workspace_id)
+                ).chat_test()
             )
-            return result.success(KnowledgeSerializer.BatchChatTest(
-                data={
-                    'workspace_id': workspace_id,
-                    'knowledge_id_list': permitted_ids,
-                    'user_id': request.user.id,
-                    'llm_model_id': request.data.get('llm_model_id'),
-                    'query_text': request.data.get('query_text'),
-                    'top_number': request.data.get('top_number'),
-                    'similarity': request.data.get('similarity'),
-                    'search_mode': request.data.get('search_mode')
-                }
-            ).chat_test())
+
+    class BatchChatTestStream(BatchChatTest):
+        @extend_schema(
+            methods=['POST'],
+            summary=_('Knowledge chat test stream'),
+            description=_('Knowledge chat test stream'),
+            operation_id=_('Knowledge chat test stream'),
+            parameters=BatchChatTestAPI.get_parameters(),
+            request=BatchChatTestAPI.get_request(),
+            responses=BatchChatTestAPI.get_response(),
+            tags=[_('Knowledge Base')]
+        )
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_permission(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            RoleConstants.USER.get_workspace_role()
+        )
+        def post(self, request: Request, workspace_id: str):
+            response = StreamingHttpResponse(
+                streaming_content=self.get_chat_serializer(
+                    request,
+                    workspace_id,
+                    self.get_permitted_ids(request, workspace_id)
+                ).stream_chat_test(),
+                content_type="text/event-stream;charset=utf-8",
+                charset="utf-8",
+            )
+            response["Cache-Control"] = "no-cache"
+            return response
 
     class Embedding(APIView):
         authentication_classes = [TokenAuth]
@@ -569,7 +612,7 @@ class KnowledgeView(APIView):
                 data={
                     'workspace_id': workspace_id,
                     'model_type': 'LLM',
-                    'user_id': request.user.id
+                    'user_id': str(request.user.id)
                 }
             ).list(workspace_id, True))
 
@@ -584,7 +627,8 @@ class KnowledgeView(APIView):
             return result.success(ModelSerializer.Query(
                 data={
                     'workspace_id': workspace_id,
-                    'model_type': 'EMBEDDING'
+                    'model_type': 'EMBEDDING',
+                    'user_id': str(request.user.id)
                 }
             ).list(workspace_id, True))
 

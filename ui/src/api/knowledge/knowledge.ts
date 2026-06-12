@@ -1,5 +1,5 @@
 import { Result } from '@/request/Result'
-import { get, post, del, put, exportFile, exportExcel } from '@/request/index'
+import { get, post, postStream, del, put, exportFile, exportExcel } from '@/request/index'
 import { type Ref } from 'vue'
 import type { pageRequest } from '@/api/type/common'
 import type { knowledgeData } from '@/api/type/knowledge'
@@ -188,6 +188,11 @@ const postKnowledgeChatTest: (
   return post(`${prefix.value}/chat_test`, data, undefined, loading)
 }
 
+const postKnowledgeChatTestStream: (data: any) => Promise<any> = (data) => {
+  const apiPrefix = (window.MaxKB?.prefix ? window.MaxKB?.prefix : '/admin') + '/api'
+  return postStream(`${apiPrefix}${prefix.value}/chat_test/stream`, data)
+}
+
 /**
  * 创建知识库
  * @param 参数
@@ -226,7 +231,7 @@ const getKnowledgeEmdeddingModel: (
  * @returns
  */
 const getKnowledgeModel: (loading?: Ref<boolean>) => Promise<Result<Array<any>>> = (loading) => {
-  return get(`${prefix.value}/model`, loading)
+  return get(`${prefix.value}/model`, undefined, loading)
 }
 
 // 创建飞书知识库
@@ -367,6 +372,7 @@ export default {
   putKnowledgeHitTest,
   putKnowledgeBatchHitTest,
   postKnowledgeChatTest,
+  postKnowledgeChatTestStream,
   postKnowledge,
   getKnowledgeModel,
   postLarkKnowledge,

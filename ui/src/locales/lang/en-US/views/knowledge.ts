@@ -123,6 +123,9 @@ export default {
     greeting: 'Ready for questions.',
     noReference: 'No related content found.',
     referenceSummary: '{count} related references found.',
+    responseMode: 'Response mode',
+    streamMode: 'Streaming',
+    normalMode: 'Normal',
     clear: 'Clear chat',
   },
   customSegmentation: {

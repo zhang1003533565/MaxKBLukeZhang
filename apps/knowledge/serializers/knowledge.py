@@ -1340,6 +1340,24 @@ class KnowledgeSerializer(serializers.Serializer):
                 "references": references,
             }
 
+        def stream_chat_test(self):
+            try:
+                references = self._sort_references(self.hit_test())
+                yield "event: references\ndata: {}\n\n".format(json.dumps(references, ensure_ascii=False))
+                llm_model = self._get_llm_model()
+                chat_input = self._build_chat_input(references)
+                try:
+                    response = llm_model.stream([HumanMessage(content=chat_input)])
+                except AttributeError:
+                    response = [llm_model.invoke([HumanMessage(content=chat_input)])]
+                for chunk in response:
+                    content = self._get_response_content(chunk)
+                    if content:
+                        yield "event: answer\ndata: {}\n\n".format(json.dumps(content, ensure_ascii=False))
+                yield "event: done\ndata: {}\n\n"
+            except Exception as e:
+                yield "event: error\ndata: {}\n\n".format(json.dumps(str(e), ensure_ascii=False))
+
     class Tags(serializers.Serializer):
         workspace_id = serializers.CharField(required=True, label=_("workspace id"))
         user_id = serializers.UUIDField(required=True, label=_("user id"))
