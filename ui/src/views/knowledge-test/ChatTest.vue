@@ -99,30 +99,41 @@
               :class="message.role"
             >
               <div class="message-bubble">
-                <div v-if="message.content" class="message-content">{{ message.content }}</div>
-                <div v-else-if="message.loading" class="typing-indicator">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-                <div v-if="message.references?.length" class="reference-list">
-                  <div
-                    v-for="(item, index) in message.references"
-                    :key="`${message.id}-${item.id || index}`"
-                    class="reference-item border"
-                  >
-                    <div class="flex-between mb-6">
-                      <div class="ellipsis">
-                        <span class="bold">{{ item.knowledge_name }}</span>
-                        <span class="color-secondary ml-8">{{ item.document_name }}</span>
-                      </div>
+                <template v-if="message.role === 'assistant'">
+                  <div v-if="message.references?.length" class="reference-panel border">
+                    <div class="reference-panel-header">
+                      <span>{{ $t('views.knowledge.chatTest.hitReferences') }}</span>
                       <el-tag size="small" type="info">
-                        {{ scoreText(item) }}
+                        {{ $t('views.knowledge.chatTest.hitCount', { count: message.references.length }) }}
                       </el-tag>
                     </div>
-                    <div class="reference-content">{{ item.content }}</div>
+                    <div class="reference-list">
+                      <div
+                        v-for="(item, index) in message.references"
+                        :key="`${message.id}-${item.id || index}`"
+                        class="reference-item border"
+                      >
+                        <div class="flex-between mb-6">
+                          <div class="ellipsis">
+                            <span class="bold">{{ item.knowledge_name }}</span>
+                            <span class="color-secondary ml-8">{{ item.document_name }}</span>
+                          </div>
+                          <el-tag size="small" type="info">
+                            {{ scoreText(item) }}
+                          </el-tag>
+                        </div>
+                        <div class="reference-content">{{ item.content }}</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                  <div v-if="message.content" class="message-content">{{ message.content }}</div>
+                  <div v-else-if="message.loading" class="typing-indicator">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </template>
+                <div v-else class="message-content">{{ message.content }}</div>
               </div>
             </div>
           </div>
@@ -226,11 +237,8 @@ function clearMessages() {
   nextTick(() => inputRef.value?.focus?.())
 }
 
-function buildAssistantContent(list: any[]) {
-  if (!list.length) {
-    return t('views.knowledge.chatTest.noReference')
-  }
-  return t('views.knowledge.chatTest.referenceSummary', { count: list.length })
+function buildEmptyAnswerContent() {
+  return t('views.knowledge.chatTest.emptyAnswer')
 }
 
 type StreamEvent = {
@@ -313,7 +321,7 @@ async function sendNormalMessage(payload: ReturnType<typeof buildChatPayload>, a
     ? arraySort(res.data.references, 'comprehensive_score', true)
     : []
   updateAssistantMessage(assistantIndex, {
-    content: res.data?.answer || buildAssistantContent(references),
+    content: res.data?.answer || buildEmptyAnswerContent(),
     references,
     loading: false,
   })
@@ -378,7 +386,7 @@ async function sendStreamMessage(payload: ReturnType<typeof buildChatPayload>, a
     }
   })
   if (!hasAnswer) {
-    updateAssistantContent(assistantIndex, buildAssistantContent(messages.value[assistantIndex].references || []))
+    updateAssistantContent(assistantIndex, buildEmptyAnswerContent())
   }
   finishAssistantLoading(assistantIndex)
 }
@@ -552,6 +560,10 @@ onMounted(() => {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+
+  .reference-panel + & {
+    margin-top: 12px;
+  }
 }
 
 .typing-indicator {
@@ -559,6 +571,10 @@ onMounted(() => {
   align-items: center;
   gap: 4px;
   height: 20px;
+
+  .reference-panel + & {
+    margin-top: 12px;
+  }
 
   span {
     width: 6px;
@@ -591,14 +607,32 @@ onMounted(() => {
   }
 }
 
+.reference-panel {
+  width: min(760px, 100%);
+  padding: 10px;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.reference-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+
 .reference-list {
-  margin-top: 12px;
+  max-height: 220px;
+  overflow: auto;
 }
 
 .reference-item {
   padding: 12px;
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--app-layout-bg-color);
   color: var(--el-text-color-primary);
 
   & + .reference-item {

@@ -21,6 +21,7 @@ from common.exception.app_exception import AppApiException
 from common.field.common import UploadedFileField
 from common.utils.common import bulk_create_in_batches, get_file_content, parse_image, post
 from django.core import validators
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from django.db.models import QuerySet
 from django.db.models.functions import Reverse, Substr
@@ -1344,7 +1345,9 @@ class KnowledgeSerializer(serializers.Serializer):
             try:
                 yield "event: start\ndata: {}\n\n"
                 references = self._sort_references(self.hit_test())
-                yield "event: references\ndata: {}\n\n".format(json.dumps(references, ensure_ascii=False))
+                yield "event: references\ndata: {}\n\n".format(
+                    json.dumps(references, ensure_ascii=False, cls=DjangoJSONEncoder)
+                )
                 llm_model = self._get_llm_model()
                 chat_input = self._build_chat_input(references)
                 try:
