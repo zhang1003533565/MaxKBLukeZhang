@@ -124,6 +124,7 @@ export default {
     inputPlaceholder: '输入问题，测试知识库反馈',
     greeting: '可以开始提问。',
     noReference: '没有找到相关内容。',
+    noReferenceShort: '无',
     referenceSummary: '找到 {count} 条相关内容。',
     hitReferences: '命中知识库',
     hitCount: '{count} 条命中',

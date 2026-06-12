@@ -100,14 +100,19 @@
             >
               <div class="message-bubble">
                 <template v-if="message.role === 'assistant'">
-                  <div v-if="message.references?.length" class="reference-panel border">
+                  <div v-if="message.referencesLoaded" class="reference-panel border">
                     <div class="reference-panel-header">
                       <span>{{ $t('views.knowledge.chatTest.hitReferences') }}</span>
                       <el-tag size="small" type="info">
-                        {{ $t('views.knowledge.chatTest.hitCount', { count: message.references.length }) }}
+                        {{ $t('views.knowledge.chatTest.hitCount', { count: message.references?.length || 0 }) }}
                       </el-tag>
                     </div>
-                    <div class="reference-list">
+                    <el-empty
+                      v-if="!message.references?.length"
+                      :description="$t('views.knowledge.chatTest.noReferenceShort')"
+                      :image-size="56"
+                    />
+                    <div v-else class="reference-list">
                       <div
                         v-for="(item, index) in message.references"
                         :key="`${message.id}-${item.id || index}`"
@@ -122,7 +127,12 @@
                             {{ scoreText(item) }}
                           </el-tag>
                         </div>
-                        <div class="reference-content">{{ item.content }}</div>
+                        <MdPreview
+                          editorId="preview-only"
+                          :modelValue="item.content || ''"
+                          class="reference-content maxkb-md"
+                          noImgZoomIn
+                        />
                       </div>
                     </div>
                   </div>
@@ -170,6 +180,7 @@ type ChatMessage = {
   role: 'assistant' | 'user'
   content: string
   references?: any[]
+  referencesLoaded?: boolean
   loading?: boolean
 }
 
@@ -295,6 +306,7 @@ function updateAssistantMessage(index: number, values: Partial<ChatMessage>) {
 function updateAssistantReferences(index: number, references: any[]) {
   updateAssistantMessage(index, {
     references,
+    referencesLoaded: true,
   })
 }
 
@@ -323,6 +335,7 @@ async function sendNormalMessage(payload: ReturnType<typeof buildChatPayload>, a
   updateAssistantMessage(assistantIndex, {
     content: res.data?.answer || buildEmptyAnswerContent(),
     references,
+    referencesLoaded: true,
     loading: false,
   })
 }
@@ -415,6 +428,7 @@ async function sendMessage(event?: KeyboardEvent | MouseEvent) {
     role: 'assistant',
     content: '',
     references: [],
+    referencesLoaded: false,
     loading: true,
   }) - 1
   question.value = ''
@@ -474,14 +488,19 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .knowledge-chat-test {
+  display: flex;
   height: calc(100vh - var(--app-header-height));
+  min-height: 0;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .chat-shell {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  flex: 1;
   height: 100%;
+  min-height: 0;
   border: 1px solid var(--el-border-color-light);
   border-radius: 8px;
   overflow: hidden;
@@ -492,6 +511,7 @@ onMounted(() => {
   padding: 20px;
   background: var(--app-layout-bg-color);
   overflow: auto;
+  min-height: 0;
 }
 
 .mode-group {
@@ -517,15 +537,21 @@ onMounted(() => {
 .chat-main {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .messages-scroll {
   height: 100%;
+  min-height: 0;
 }
 
 .messages {
   padding: 24px;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 .message-row {
@@ -642,10 +668,21 @@ onMounted(() => {
 
 .reference-content {
   line-height: 1.7;
-  max-height: 108px;
+  max-height: 160px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+
+  :deep(.md-editor-preview-wrapper) {
+    padding: 0;
+  }
+
+  :deep(img) {
+    max-width: 100%;
+    max-height: 120px;
+    border-radius: 6px;
+    object-fit: contain;
+  }
 }
 
 .chat-input {
@@ -654,5 +691,7 @@ onMounted(() => {
   gap: 12px;
   padding: 14px 16px;
   background: #ffffff;
+  min-height: 62px;
+  box-sizing: border-box;
 }
 </style>

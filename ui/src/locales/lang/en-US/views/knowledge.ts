@@ -122,6 +122,7 @@ export default {
     inputPlaceholder: 'Ask a question to test knowledge feedback',
     greeting: 'Ready for questions.',
     noReference: 'No related content found.',
+    noReferenceShort: 'None',
     referenceSummary: '{count} related references found.',
     hitReferences: 'Matched knowledge',
     hitCount: '{count} hits',

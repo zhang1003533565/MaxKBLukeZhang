@@ -114,6 +114,7 @@ export default {
     inputPlaceholder: '輸入問題，測試知識庫回饋',
     greeting: '可以開始提問。',
     noReference: '沒有找到相關內容。',
+    noReferenceShort: '無',
     referenceSummary: '找到 {count} 條相關內容。',
     hitReferences: '命中知識庫',
     hitCount: '{count} 條命中',
