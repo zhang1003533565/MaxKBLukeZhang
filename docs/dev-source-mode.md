@@ -39,6 +39,16 @@ The script creates `.venv` automatically with Python 3.11 through `uv`, installs
 
 Local runtime files such as logs, temporary files, and model cache are written under `.local/maxkb`.
 
+## 3. Start background tasks
+
+Open another terminal:
+
+```bash
+./scripts/dev-celery.sh
+```
+
+The background task worker consumes queued knowledge-base jobs such as vectorization, tokenization, and related-question generation. If this process is not running, document vectorization will stay in the queued state.
+
 ## Knowledge-base-only mode
 
 The development scripts run MaxKB as a standalone knowledge-base system by default:
@@ -52,9 +62,9 @@ If `ui/env/.env` does not exist, `scripts/dev-frontend-admin.sh` creates it from
 
 To temporarily restore the full MaxKB product, start the backend with `MAXKB_KNOWLEDGE_ONLY=false`, set `VITE_KNOWLEDGE_ONLY=false` in `ui/env/.env`, then restart the frontend.
 
-## 3. Start admin frontend
+## 4. Start admin frontend
 
-Open a second terminal:
+Open another terminal:
 
 ```bash
 ./scripts/dev-frontend-admin.sh
@@ -73,7 +83,7 @@ admin
 MaxKB@123..
 ```
 
-## 4. Remove the default local embedding model
+## 5. Remove the default local embedding model
 
 The source database migration creates a default local embedding model. If you plan to use an online embedding provider, remove that local default from the development database:
 
@@ -83,7 +93,7 @@ The source database migration creates a default local embedding model. If you pl
 
 Then add your online embedding model in the MaxKB UI before creating or vectorizing knowledge bases.
 
-## 5. Full-product chat frontend
+## 6. Full-product chat frontend
 
 The chat frontend is disabled in knowledge-base-only mode. Only use it after restoring the full MaxKB product.
 

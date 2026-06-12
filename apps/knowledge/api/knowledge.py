@@ -6,7 +6,7 @@ from common.result import ResultSerializer, DefaultResultSerializer
 from knowledge.serializers.common import BatchSerializer, BatchMoveSerializer
 from knowledge.serializers.common import GenerateRelatedSerializer
 from knowledge.serializers.knowledge import KnowledgeBaseCreateRequest, KnowledgeModelSerializer, KnowledgeEditRequest, \
-    BatchHitTestSerializer, HitTestSerializer, KnowledgeImportRequest
+    BatchChatTestSerializer, BatchHitTestSerializer, HitTestSerializer, KnowledgeImportRequest
 
 
 class KnowledgeCreateResponse(ResultSerializer):
@@ -201,6 +201,12 @@ class BatchHitTestAPI(KnowledgePageAPI):
     @staticmethod
     def get_request():
         return BatchHitTestSerializer
+
+
+class BatchChatTestAPI(BatchHitTestAPI):
+    @staticmethod
+    def get_request():
+        return BatchChatTestSerializer
 
 
 class EmbeddingAPI(KnowledgeReadAPI):

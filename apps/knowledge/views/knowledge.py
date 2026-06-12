@@ -10,8 +10,8 @@ from common.constants.permission_constants import PermissionConstants, RoleConst
 from common.log.log import log
 from common import result
 from knowledge.api.knowledge import KnowledgeBaseCreateAPI, KnowledgeTreeReadAPI, \
-    BatchHitTestAPI, KnowledgeEditAPI, KnowledgeReadAPI, KnowledgePageAPI, GenerateRelatedAPI, HitTestAPI, EmbeddingAPI, \
-    GetModelAPI, KnowledgeExportAPI, KnowledgeBatchOperateAPI, KnowledgeImportAPI
+    BatchChatTestAPI, BatchHitTestAPI, KnowledgeEditAPI, KnowledgeReadAPI, KnowledgePageAPI, GenerateRelatedAPI, \
+    HitTestAPI, EmbeddingAPI, GetModelAPI, KnowledgeExportAPI, KnowledgeBatchOperateAPI, KnowledgeImportAPI
 from knowledge.models import KnowledgeScope
 from knowledge.serializers.common import get_knowledge_operation_object
 from knowledge.serializers.knowledge import KnowledgeSerializer, KnowledgeBatchOperateSerializer
@@ -321,6 +321,55 @@ class KnowledgeView(APIView):
                 }
             ).hit_test())
 
+    class BatchChatTest(APIView):
+        authentication_classes = [TokenAuth]
+
+        @extend_schema(
+            methods=['POST'],
+            summary=_('Knowledge chat test'),
+            description=_('Knowledge chat test'),
+            operation_id=_('Knowledge chat test'),
+            parameters=BatchChatTestAPI.get_parameters(),
+            request=BatchChatTestAPI.get_request(),
+            responses=BatchChatTestAPI.get_response(),
+            tags=[_('Knowledge Base')]
+        )
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_permission(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            RoleConstants.USER.get_workspace_role()
+        )
+        def post(self, request: Request, workspace_id: str):
+            knowledge_id_list = request.data.get('knowledge_id_list', [])
+            permitted_ids = check_batch_permissions(
+                request,
+                knowledge_id_list,
+                'knowledge_id',
+                (
+                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_knowledge_permission(),
+                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_permission_workspace_manage_role(),
+                    ViewPermission(
+                        [RoleConstants.USER.get_workspace_role()],
+                        [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                        CompareConstants.AND
+                    ),
+                    RoleConstants.WORKSPACE_MANAGE.get_workspace_role()
+                ),
+                workspace_id=workspace_id
+            )
+            return result.success(KnowledgeSerializer.BatchChatTest(
+                data={
+                    'workspace_id': workspace_id,
+                    'knowledge_id_list': permitted_ids,
+                    'user_id': request.user.id,
+                    'llm_model_id': request.data.get('llm_model_id'),
+                    'query_text': request.data.get('query_text'),
+                    'top_number': request.data.get('top_number'),
+                    'similarity': request.data.get('similarity'),
+                    'search_mode': request.data.get('search_mode')
+                }
+            ).chat_test())
+
     class Embedding(APIView):
         authentication_classes = [TokenAuth]
 
@@ -519,7 +568,8 @@ class KnowledgeView(APIView):
             return result.success(ModelSerializer.Query(
                 data={
                     'workspace_id': workspace_id,
-                    'model_type': 'LLM'
+                    'model_type': 'LLM',
+                    'user_id': request.user.id
                 }
             ).list(workspace_id, True))
 

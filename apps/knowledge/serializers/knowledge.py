@@ -28,8 +28,11 @@ from django.db.models.query_utils import Q
 from django.http import HttpResponse
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
+from langchain_core.messages import HumanMessage
 from maxkb.conf import PROJECT_DIR
+from models_provider.base_model_provider import ModelTypeConst
 from models_provider.models import Model
+from models_provider.tools import get_model_by_id, get_model_instance_by_model_workspace_id
 from rest_framework import serializers
 from system_manage.models import AuthTargetType, WorkspaceUserResourcePermission
 from system_manage.models.resource_mapping import ResourceMapping
@@ -157,6 +160,10 @@ class BatchHitTestSerializer(HitTestSerializer):
         child=serializers.UUIDField(required=True, label=_("knowledge id")),
         label=_("knowledge id list"),
     )
+
+
+class BatchChatTestSerializer(BatchHitTestSerializer):
+    llm_model_id = serializers.UUIDField(required=True, label=_("llm model id"))
 
 
 class KnowledgeSerializer(serializers.Serializer):
@@ -1269,6 +1276,69 @@ class KnowledgeSerializer(serializers.Serializer):
                 }
                 for p in p_list
             ]
+
+    class BatchChatTest(BatchHitTest):
+        llm_model_id = serializers.UUIDField(required=True, label=_("llm model id"))
+
+        @staticmethod
+        def _sort_references(references):
+            return sorted(
+                references,
+                key=lambda item: item.get("comprehensive_score") or item.get("similarity") or 0,
+                reverse=True,
+            )
+
+        @staticmethod
+        def _get_response_content(response):
+            content = getattr(response, "content", response)
+            if isinstance(content, list):
+                text_list = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text_list.append(str(item.get("text") or item))
+                    else:
+                        text_list.append(str(item))
+                return "\n".join(text_list)
+            return "" if content is None else str(content)
+
+        def _get_llm_model(self):
+            workspace_id = self.validated_data.get("workspace_id")
+            model_id = str(self.validated_data.get("llm_model_id"))
+            try:
+                model = get_model_by_id(model_id, workspace_id)
+            except Exception as e:
+                raise AppApiException(500, str(e)) from e
+            if model.model_type != ModelTypeConst.LLM.name:
+                raise AppApiException(500, _("Please select an LLM model"))
+            try:
+                return get_model_instance_by_model_workspace_id(model_id, workspace_id)
+            except Exception as e:
+                raise AppApiException(500, str(e)) from e
+
+        def _build_chat_input(self, references):
+            reference_content = "\n\n".join(
+                [
+                    str(reference.get("content")).strip()
+                    for reference in references
+                    if reference.get("content")
+                ]
+            )
+            query_text = self.validated_data.get("query_text")
+            if not reference_content:
+                return query_text
+            return f"{query_text}\n\n{reference_content}"
+
+        def chat_test(self):
+            references = self._sort_references(self.hit_test())
+            llm_model = self._get_llm_model()
+            try:
+                response = llm_model.invoke([HumanMessage(content=self._build_chat_input(references))])
+            except Exception as e:
+                raise AppApiException(500, str(e)) from e
+            return {
+                "answer": self._get_response_content(response),
+                "references": references,
+            }
 
     class Tags(serializers.Serializer):
         workspace_id = serializers.CharField(required=True, label=_("workspace id"))

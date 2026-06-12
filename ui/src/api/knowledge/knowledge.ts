@@ -178,6 +178,17 @@ const putKnowledgeBatchHitTest: (
 }
 
 /**
+ * 多知识库聊天测试
+ * @query { llm_model_id: string, knowledge_id_list: string[], query_text: string, top_number: number, similarity: number }
+ */
+const postKnowledgeChatTest: (
+  data: any,
+  loading?: Ref<boolean>,
+) => Promise<Result<any>> = (data, loading) => {
+  return post(`${prefix.value}/chat_test`, data, undefined, loading)
+}
+
+/**
  * 创建知识库
  * @param 参数
  * {
@@ -355,6 +366,7 @@ export default {
   putGenerateRelated,
   putKnowledgeHitTest,
   putKnowledgeBatchHitTest,
+  postKnowledgeChatTest,
   postKnowledge,
   getKnowledgeModel,
   postLarkKnowledge,

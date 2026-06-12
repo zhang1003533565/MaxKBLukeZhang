@@ -1,5 +1,6 @@
 ./scripts/dev-deps-up.sh
 ./scripts/dev-backend.sh
+./scripts/dev-celery.sh
 ./scripts/dev-frontend-admin.sh
 http://localhost:3000/admin/
 admin

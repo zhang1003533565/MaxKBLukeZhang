@@ -1,7 +1,7 @@
 <template>
   <div class="knowledge-chat-test p-16-24">
     <div class="chat-shell">
-      <aside v-loading="knowledgeLoading" class="chat-sidebar border-r">
+      <aside v-loading="knowledgeLoading || modelLoading" class="chat-sidebar border-r">
         <div class="sidebar-header flex align-center mb-16">
           <AppIcon iconName="app-chat" class="mr-8 color-primary" />
           <h3>{{ $t('views.knowledge.chatTest.title') }}</h3>
@@ -22,6 +22,22 @@
                 v-for="item in knowledgeOptions"
                 :key="item.id"
                 :label="item.name"
+                :value="item.id"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item :label="$t('views.knowledge.chatTest.model')">
+            <el-select
+              v-model="form.llm_model_id"
+              filterable
+              class="w-full"
+              :placeholder="$t('views.knowledge.chatTest.modelPlaceholder')"
+            >
+              <el-option
+                v-for="item in modelOptions"
+                :key="item.id"
+                :label="modelLabel(item)"
                 :value="item.id"
               />
             </el-select>
@@ -131,7 +147,9 @@ type ChatMessage = {
 
 const loading = ref(false)
 const knowledgeLoading = ref(false)
+const modelLoading = ref(false)
 const knowledgeOptions = ref<any[]>([])
+const modelOptions = ref<any[]>([])
 const messages = ref<ChatMessage[]>([])
 const question = ref('')
 const scrollbarRef = ref()
@@ -140,6 +158,7 @@ const { user } = useStore()
 
 const form = reactive({
   knowledge_id_list: [] as string[],
+  llm_model_id: '',
   top_number: 5,
   similarity: 0.6,
   search_mode: 'blend',
@@ -151,6 +170,20 @@ function createId() {
 
 function scoreText(item: any) {
   return Number(item.comprehensive_score || item.similarity || 0).toFixed(3)
+}
+
+function modelLabel(item: any) {
+  if (item.model_name && item.model_name !== item.name) {
+    return `${item.name} (${item.model_name})`
+  }
+  return item.name
+}
+
+function normalizeModelList(data: any) {
+  if (Array.isArray(data)) {
+    return data
+  }
+  return [...(data?.shared_model || []), ...(data?.model || [])]
 }
 
 function scrollToBottom() {
@@ -194,6 +227,10 @@ function sendMessage(event?: KeyboardEvent | MouseEvent) {
     MsgWarning(t('views.knowledge.chatTest.knowledgeRequired'))
     return
   }
+  if (!form.llm_model_id) {
+    MsgWarning(t('views.knowledge.chatTest.modelRequired'))
+    return
+  }
   if (!text || loading.value) return
 
   messages.value.push({ id: createId(), role: 'user', content: text })
@@ -201,7 +238,7 @@ function sendMessage(event?: KeyboardEvent | MouseEvent) {
   scrollToBottom()
   loading.value = true
   loadSharedApi({ type: 'knowledge', systemType: 'workspace' })
-    .putKnowledgeBatchHitTest(
+    .postKnowledgeChatTest(
       {
         ...form,
         query_text: text,
@@ -209,11 +246,11 @@ function sendMessage(event?: KeyboardEvent | MouseEvent) {
       loading,
     )
     .then((res: any) => {
-      const references = arraySort(res.data || [], 'comprehensive_score', true)
+      const references = arraySort(res.data?.references || [], 'comprehensive_score', true)
       messages.value.push({
         id: createId(),
         role: 'assistant',
-        content: buildAssistantContent(references),
+        content: res.data?.answer || buildAssistantContent(references),
         references,
       })
       scrollToBottom()
@@ -233,9 +270,21 @@ function loadKnowledgeList() {
     })
 }
 
+function loadModelList() {
+  loadSharedApi({ type: 'knowledge', systemType: 'workspace' })
+    .getKnowledgeModel(modelLoading)
+    .then((res: any) => {
+      modelOptions.value = normalizeModelList(res.data)
+      if (modelOptions.value.length === 1) {
+        form.llm_model_id = modelOptions.value[0].id
+      }
+    })
+}
+
 onMounted(() => {
   resetGreeting()
   loadKnowledgeList()
+  loadModelList()
 })
 </script>
 
