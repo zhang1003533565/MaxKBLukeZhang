@@ -14,10 +14,12 @@
         </h4>
         <ResourceAggregation />
       </el-card>
-      <!-- 监听 -->
-      <StatisticsCharts />
-      <!-- 排行榜 -->
-      <Ranking />
+      <template v-if="!isKnowledgeOnly">
+        <!-- 监听 -->
+        <StatisticsCharts />
+        <!-- 排行榜 -->
+        <Ranking />
+      </template>
 
       <br />
     </div>
@@ -31,6 +33,7 @@ import StatisticsCharts from './component/StatisticsCharts.vue'
 import QuickCreate from './component/QuickCreate.vue'
 import ResourceAggregation from './component/ResourceAggregation.vue'
 import Ranking from './component/Ranking.vue'
+import { isKnowledgeOnly } from '@/utils/knowledge-only'
 
 const route = useRoute()
 const {

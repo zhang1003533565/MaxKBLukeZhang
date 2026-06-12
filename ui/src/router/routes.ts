@@ -1,10 +1,81 @@
 import type { RouteRecordRaw } from 'vue-router'
+import { isKnowledgeOnly } from '@/utils/knowledge-only'
 
 const modules: any = import.meta.glob('./modules/*.ts', { eager: true })
 
-const rolesRoutes: RouteRecordRaw[] = [...Object.keys(modules).map((key) => modules[key].default)]
+const knowledgeOnlyModuleNames = new Set(['knowledge.ts', 'model.ts', 'document.ts', 'paragraph.ts', 'system.ts'])
+const knowledgeOnlyRouteNames = new Set([
+  'ApplicationWorkflow',
+  'KnowledgeWorkflow',
+  'ToolWorkflow',
+  'Chat',
+  'demo',
+  'UserLogin',
+  'application',
+  'application-index',
+  'ApplicationDetail',
+  'tool',
+  'tool-index',
+  'trigger',
+  'trigger-index',
+  'knowledgeWorkflowSetting',
+  'ApplicationResourceIndex',
+  'ToolResourceIndex',
+  'authorizationApplication',
+  'authorizationTool',
+  'tools',
+  'SystemChat',
+  'ChatUser',
+  'Group',
+  'Authentication',
+])
 
-export const routes: Array<RouteRecordRaw> = [
+const knowledgeOnlyPathPrefixes = [
+  '/application',
+  '/tool',
+  '/trigger',
+  '/chat',
+  '/demo',
+  '/user-login',
+  '/system/chat',
+  '/system/resource-management/application',
+  '/system/resource-management/tool',
+  '/system/authorization/application',
+  '/system/authorization/tool',
+  '/system/shared/tool',
+]
+
+const isKnowledgeOnlyRoute = (route: RouteRecordRaw) => {
+  const routeName = route.name?.toString()
+  const routePath = route.path
+  return (
+    !routeName ||
+    !knowledgeOnlyRouteNames.has(routeName) &&
+      !knowledgeOnlyPathPrefixes.some((path) => routePath.startsWith(path))
+  )
+}
+
+const filterKnowledgeOnlyRoutes = (routeList: RouteRecordRaw[]): RouteRecordRaw[] =>
+  routeList
+    .filter(isKnowledgeOnlyRoute)
+    .map((route) => {
+      const filteredRoute = { ...route } as RouteRecordRaw
+      if (route.children) {
+        filteredRoute.children = filterKnowledgeOnlyRoutes(route.children)
+      }
+      return filteredRoute
+    })
+
+const moduleKeys = Object.keys(modules).filter((key) => {
+  if (!isKnowledgeOnly) {
+    return true
+  }
+  return knowledgeOnlyModuleNames.has(key.split('/').pop() || '')
+})
+
+const rolesRoutes: RouteRecordRaw[] = [...moduleKeys.map((key) => modules[key].default)]
+
+const baseRoutes: Array<RouteRecordRaw> = [
   {
     path: '/',
     name: 'root',
@@ -125,3 +196,7 @@ export const routes: Array<RouteRecordRaw> = [
     component: () => import('@/views/error/404.vue'),
   },
 ]
+
+export const routes: Array<RouteRecordRaw> = isKnowledgeOnly
+  ? filterKnowledgeOnlyRoutes(baseRoutes)
+  : baseRoutes

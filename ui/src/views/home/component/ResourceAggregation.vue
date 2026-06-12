@@ -1,7 +1,7 @@
 <template>
   <el-skeleton :loading="loading" animated>
     <el-row :gutter="16">
-      <el-col :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
+      <el-col v-if="!isKnowledgeOnly" :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
         <el-card class="resource-card cursor" shadow="never" @click="router.push('/application')">
           <div class="flex-between">
             <div>
@@ -27,7 +27,7 @@
           </el-row>
         </el-card>
       </el-col>
-      <el-col :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
+      <el-col :xs="12" :sm="12" :md="12" :lg="isKnowledgeOnly ? 12 : 6" :xl="isKnowledgeOnly ? 12 : 6" class="mb-16">
         <el-card class="resource-card cursor" shadow="never" @click="router.push('/knowledge')">
           <div class="flex-between">
             <div>
@@ -53,7 +53,7 @@
           </el-row>
         </el-card>
       </el-col>
-      <el-col :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
+      <el-col v-if="!isKnowledgeOnly" :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
         <el-card class="resource-card cursor" shadow="never" @click="router.push('/tool')">
           <div class="flex-between">
             <div>
@@ -88,7 +88,7 @@
           </el-row>
         </el-card>
       </el-col>
-      <el-col :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
+      <el-col :xs="12" :sm="12" :md="12" :lg="isKnowledgeOnly ? 12 : 6" :xl="isKnowledgeOnly ? 12 : 6" class="mb-16">
         <el-card class="resource-card cursor" shadow="never" @click="router.push('/model')">
           <div class="flex-between">
             <div>
@@ -134,6 +134,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import homeApi from '@/api/home-page/home'
 import { toThousands } from '@/utils/common'
+import { isKnowledgeOnly } from '@/utils/knowledge-only'
 const router = useRouter()
 const loading = ref(true)
 const applicationAggregation = ref()
@@ -142,18 +143,20 @@ const toolAggregation = ref()
 const modelAggregation = ref()
 
 function getDetail() {
-  homeApi.getApplicationAggregation(loading).then((res: any) => {
-    applicationAggregation.value = res.data
-  })
   homeApi.getKnowledgeAggregation(loading).then((res: any) => {
     knowledgeAggregation.value = res.data
-  })
-  homeApi.getToolAggregation(loading).then((res: any) => {
-    toolAggregation.value = res.data
   })
   homeApi.getModelAggregation(loading).then((res: any) => {
     modelAggregation.value = res.data
   })
+  if (!isKnowledgeOnly) {
+    homeApi.getApplicationAggregation(loading).then((res: any) => {
+      applicationAggregation.value = res.data
+    })
+    homeApi.getToolAggregation(loading).then((res: any) => {
+      toolAggregation.value = res.data
+    })
+  }
 }
 onMounted(() => {
   getDetail()

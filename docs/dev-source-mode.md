@@ -39,6 +39,19 @@ The script creates `.venv` automatically with Python 3.11 through `uv`, installs
 
 Local runtime files such as logs, temporary files, and model cache are written under `.local/maxkb`.
 
+## Knowledge-base-only mode
+
+The development scripts run MaxKB as a standalone knowledge-base system by default:
+
+- Backend: `MAXKB_KNOWLEDGE_ONLY=true`
+- Frontend: `VITE_KNOWLEDGE_ONLY=true`
+
+In this mode, application, chat, trigger, and tool entry points are hidden or disabled. Knowledge bases, models, users, folders, system settings, and file storage stay available.
+
+If `ui/env/.env` does not exist, `scripts/dev-frontend-admin.sh` creates it from `ui/env/.env.example`.
+
+To temporarily restore the full MaxKB product, start the backend with `MAXKB_KNOWLEDGE_ONLY=false`, set `VITE_KNOWLEDGE_ONLY=false` in `ui/env/.env`, then restart the frontend.
+
 ## 3. Start admin frontend
 
 Open a second terminal:
@@ -70,7 +83,9 @@ The source database migration creates a default local embedding model. If you pl
 
 Then add your online embedding model in the MaxKB UI before creating or vectorizing knowledge bases.
 
-## 5. Optional chat frontend
+## 5. Full-product chat frontend
+
+The chat frontend is disabled in knowledge-base-only mode. Only use it after restoring the full MaxKB product.
 
 Open another terminal:
 

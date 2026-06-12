@@ -7,7 +7,7 @@
       :lg="6"
       :xl="6"
       class="mb-16"
-      v-if="permissionPrecise.application.workspace.create()"
+      v-if="!isKnowledgeOnly && permissionPrecise.application.workspace.create()"
     >
       <el-dropdown
         trigger="hover"
@@ -183,7 +183,10 @@
                 </div>
               </div>
             </el-dropdown-item>
-            <el-dropdown-item @click="openCreateKnowledgeDialog(CreateWorkflowKnowledgeDialog)">
+            <el-dropdown-item
+              v-if="!isKnowledgeOnly"
+              @click="openCreateKnowledgeDialog(CreateWorkflowKnowledgeDialog)"
+            >
               <div class="flex">
                 <el-avatar class="avatar-purple mt-4" shape="square" :size="32">
                   <img src="@/assets/workflow/logo_workflow.svg" style="width: 60%" alt="" />
@@ -232,7 +235,7 @@
       :lg="6"
       :xl="6"
       class="mb-16"
-      v-if="permissionPrecise.tool.workspace.create()"
+      v-if="!isKnowledgeOnly && permissionPrecise.tool.workspace.create()"
     >
       <el-dropdown
         trigger="hover"
@@ -424,6 +427,7 @@ import { useRouter, useRoute } from 'vue-router'
 import useStore from '@/stores'
 import { t } from '@/locales'
 import permissionMap from '@/permission'
+import { isKnowledgeOnly } from '@/utils/knowledge-only'
 const { user, tool } = useStore()
 const router = useRouter()
 const props = defineProps({

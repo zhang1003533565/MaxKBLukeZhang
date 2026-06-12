@@ -22,8 +22,7 @@ from django.urls import path, re_path, include
 from django.views import static
 from rest_framework import status
 
-from chat.urls import urlpatterns as chat_urlpatterns
-from common.init.init_doc import init_doc
+from common.init.init_doc import init_app_doc, init_doc
 from common.result import Result
 from maxkb import settings
 from maxkb.conf import PROJECT_DIR
@@ -33,23 +32,37 @@ admin_api_prefix = CONFIG.get_admin_path()[1:] + '/api/'
 admin_ui_prefix = CONFIG.get_admin_path()
 chat_api_prefix = CONFIG.get_chat_path()[1:] + '/api/'
 chat_ui_prefix = CONFIG.get_chat_path()
+
+
+def is_knowledge_only_mode():
+    return str(CONFIG.get("KNOWLEDGE_ONLY", "false")).lower() in ("1", "true", "yes", "on")
+
+
 urlpatterns = [
     path(admin_api_prefix, include("users.urls")),
-    path(admin_api_prefix, include("tools.urls")),
     path(admin_api_prefix, include("models_provider.urls")),
     path(admin_api_prefix, include("folders.urls")),
     path(admin_api_prefix, include("knowledge.urls")),
     path(admin_api_prefix, include("system_manage.urls")),
-    path(admin_api_prefix, include("application.urls")),
-    path(admin_api_prefix, include("trigger.urls")),
     path(admin_api_prefix, include("oss.urls")),
     path(admin_api_prefix, include("homepage.urls")),
-    path(chat_api_prefix, include("oss.urls")),
-    path(chat_api_prefix, include("chat.urls")),
     path(f'{admin_ui_prefix[1:]}/', include('oss.retrieval_urls')),
-    path(f'{chat_ui_prefix[1:]}/', include('oss.retrieval_urls')),
 ]
-init_doc(urlpatterns, chat_urlpatterns)
+
+if not is_knowledge_only_mode():
+    from chat.urls import urlpatterns as chat_urlpatterns
+
+    urlpatterns += [
+        path(admin_api_prefix, include("tools.urls")),
+        path(admin_api_prefix, include("application.urls")),
+        path(admin_api_prefix, include("trigger.urls")),
+        path(chat_api_prefix, include("oss.urls")),
+        path(chat_api_prefix, include("chat.urls")),
+        path(f'{chat_ui_prefix[1:]}/', include('oss.retrieval_urls')),
+    ]
+    init_doc(urlpatterns, chat_urlpatterns)
+else:
+    init_app_doc(urlpatterns)
 
 
 def pro():
@@ -88,6 +101,8 @@ def get_index_html(index_path):
 
 
 def get_all_files(directory):
+    if not os.path.isdir(directory):
+        return []
     base_path = Path(directory)
     file_paths = [
         '/' + str(file.relative_to(base_path)).replace('\\', '/')
@@ -98,9 +113,11 @@ def get_all_files(directory):
 
 
 static_dict = {
-    chat_ui_prefix: get_all_files(os.path.join(PROJECT_DIR, 'apps', "static", 'chat')),
     admin_ui_prefix: get_all_files(os.path.join(PROJECT_DIR, 'apps', "static", 'admin'))
 }
+
+if not is_knowledge_only_mode():
+    static_dict[chat_ui_prefix] = get_all_files(os.path.join(PROJECT_DIR, 'apps', "static", 'chat'))
 
 
 def page_not_found(request, exception):
@@ -112,6 +129,8 @@ def page_not_found(request, exception):
     if request.path.startswith(chat_ui_prefix + '/api/'):
         return Result(response_status=status.HTTP_404_NOT_FOUND, code=404, message="HTTP_404_NOT_FOUND")
     if request.path.startswith(chat_ui_prefix):
+        if is_knowledge_only_mode():
+            return HttpResponse("页面不存在", status=404)
         in_ = [url for url in static_dict.get(chat_ui_prefix) if request.path.endswith(url)]
         if len(in_) > 0:
             a = chat_ui_prefix + in_[0]
