@@ -411,6 +411,7 @@ class KnowledgeView(APIView):
                 charset="utf-8",
             )
             response["Cache-Control"] = "no-cache"
+            response["X-Accel-Buffering"] = "no"
             return response
 
     class Embedding(APIView):

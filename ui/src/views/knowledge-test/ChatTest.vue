@@ -99,7 +99,12 @@
               :class="message.role"
             >
               <div class="message-bubble">
-                <div class="message-content">{{ message.content }}</div>
+                <div v-if="message.content" class="message-content">{{ message.content }}</div>
+                <div v-else-if="message.loading" class="typing-indicator">
+                  <span />
+                  <span />
+                  <span />
+                </div>
                 <div v-if="message.references?.length" class="reference-list">
                   <div
                     v-for="(item, index) in message.references"
@@ -154,6 +159,7 @@ type ChatMessage = {
   role: 'assistant' | 'user'
   content: string
   references?: any[]
+  loading?: boolean
 }
 
 const loading = ref(false)
@@ -294,6 +300,12 @@ function appendAssistantContent(index: number, content: string) {
   updateAssistantContent(index, `${messages.value[index].content}${content}`)
 }
 
+function finishAssistantLoading(index: number) {
+  updateAssistantMessage(index, {
+    loading: false,
+  })
+}
+
 async function sendNormalMessage(payload: ReturnType<typeof buildChatPayload>, assistantIndex: number) {
   const res = await loadSharedApi({ type: 'knowledge', systemType: 'workspace' })
     .postKnowledgeChatTest(payload)
@@ -303,6 +315,7 @@ async function sendNormalMessage(payload: ReturnType<typeof buildChatPayload>, a
   updateAssistantMessage(assistantIndex, {
     content: res.data?.answer || buildAssistantContent(references),
     references,
+    loading: false,
   })
 }
 
@@ -332,13 +345,13 @@ async function sendStreamMessage(payload: ReturnType<typeof buildChatPayload>, a
           ? arraySort(data, 'comprehensive_score', true)
           : []
         updateAssistantReferences(assistantIndex, references)
-        if (!hasAnswer) {
-          updateAssistantContent(assistantIndex, buildAssistantContent(references))
-        }
       }
       if (streamEvent.event === 'answer') {
         if (!hasAnswer) {
-          updateAssistantContent(assistantIndex, '')
+          updateAssistantMessage(assistantIndex, {
+            content: '',
+            loading: false,
+          })
           hasAnswer = true
         }
         appendAssistantContent(assistantIndex, String(data))
@@ -355,12 +368,19 @@ async function sendStreamMessage(payload: ReturnType<typeof buildChatPayload>, a
     const data = readStreamData(streamEvent.data)
     if (streamEvent.event === 'answer') {
       if (!hasAnswer) {
-        updateAssistantContent(assistantIndex, '')
+        updateAssistantMessage(assistantIndex, {
+          content: '',
+          loading: false,
+        })
         hasAnswer = true
       }
       appendAssistantContent(assistantIndex, String(data))
     }
   })
+  if (!hasAnswer) {
+    updateAssistantContent(assistantIndex, buildAssistantContent(messages.value[assistantIndex].references || []))
+  }
+  finishAssistantLoading(assistantIndex)
 }
 
 async function sendMessage(event?: KeyboardEvent | MouseEvent) {
@@ -387,6 +407,7 @@ async function sendMessage(event?: KeyboardEvent | MouseEvent) {
     role: 'assistant',
     content: '',
     references: [],
+    loading: true,
   }) - 1
   question.value = ''
   scrollToBottom()
@@ -400,9 +421,13 @@ async function sendMessage(event?: KeyboardEvent | MouseEvent) {
     }
   } catch (error: any) {
     const message = error?.message || String(error)
-    updateAssistantContent(assistantIndex, message)
+    updateAssistantMessage(assistantIndex, {
+      content: message,
+      loading: false,
+    })
     MsgError(message)
   } finally {
+    finishAssistantLoading(assistantIndex)
     loading.value = false
     scrollToBottom()
   }
@@ -527,6 +552,43 @@ onMounted(() => {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--el-text-color-secondary);
+    animation: typing-bounce 1.2s infinite ease-in-out;
+
+    &:nth-child(2) {
+      animation-delay: 0.16s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: 0.32s;
+    }
+  }
+}
+
+@keyframes typing-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .reference-list {

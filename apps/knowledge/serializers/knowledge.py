@@ -1342,6 +1342,7 @@ class KnowledgeSerializer(serializers.Serializer):
 
         def stream_chat_test(self):
             try:
+                yield "event: start\ndata: {}\n\n"
                 references = self._sort_references(self.hit_test())
                 yield "event: references\ndata: {}\n\n".format(json.dumps(references, ensure_ascii=False))
                 llm_model = self._get_llm_model()
