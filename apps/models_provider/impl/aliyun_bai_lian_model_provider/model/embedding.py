@@ -15,6 +15,7 @@ from models_provider.base_model_provider import MaxKBBaseModel
 
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".ico")
 VIDEO_SUFFIXES = (".mp4", ".avi", ".mov", ".mpeg", ".mpg", ".webm", ".flv", ".mkv")
+BAILIAN_EMBEDDING_API_BASE = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
 
 class AliyunBaiLianEmbedding(MaxKBBaseModel):
@@ -39,7 +40,7 @@ class AliyunBaiLianEmbedding(MaxKBBaseModel):
         return AliyunBaiLianEmbedding(
             api_key=model_credential.get('dashscope_api_key'),
             model_name=model_name,
-            api_base=model_credential.get('api_base') or 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+            api_base=BAILIAN_EMBEDDING_API_BASE,
             optional_params=optional_params
         )
 

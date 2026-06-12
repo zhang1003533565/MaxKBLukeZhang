@@ -8,6 +8,8 @@ from langchain_core.messages import AIMessage
 from models_provider.base_model_provider import MaxKBBaseModel
 from models_provider.impl.base_chat_open_ai import BaseChatOpenAI
 
+BAILIAN_LLM_API_BASE = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+
 
 class BaiLianChatModel(MaxKBBaseModel, BaseChatOpenAI):
     @staticmethod
@@ -21,7 +23,7 @@ class BaiLianChatModel(MaxKBBaseModel, BaseChatOpenAI):
         #     optional_params['streaming'] = True
         return BaiLianChatModel(
             model=model_name,
-            openai_api_base=model_credential.get('api_base'),
+            openai_api_base=BAILIAN_LLM_API_BASE,
             openai_api_key=model_credential.get('api_key'),
             streaming=True,
             **optional_params,

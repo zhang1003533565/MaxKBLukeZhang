@@ -9,6 +9,7 @@ from common.exception.app_exception import AppApiException
 from common.forms import BaseForm, TooltipLabel
 from models_provider.base_model_provider import BaseModelCredential, ValidCode
 from common.utils.logger import maxkb_logger
+from models_provider.impl.aliyun_bai_lian_model_provider.model.llm import BAILIAN_LLM_API_BASE
 
 class BaiLianLLMModelParams(BaseForm):
     temperature = forms.SliderField(
@@ -39,7 +40,12 @@ class BaiLianLLMModelParams(BaseForm):
 
 
 class BaiLianLLMModelCredential(BaseForm, BaseModelCredential):
-    api_base = forms.TextInputField(_('API URL'), required=True)
+    api_base = forms.TextInputField(
+        _('API URL'),
+        required=True,
+        default_value=BAILIAN_LLM_API_BASE,
+        attrs={'disabled': True}
+    )
     api_key = forms.PasswordInputField(_('API Key'), required=True)
 
     def is_valid(
@@ -58,7 +64,8 @@ class BaiLianLLMModelCredential(BaseForm, BaseModelCredential):
                 gettext('{model_type} Model type is not supported').format(model_type=model_type)
             )
 
-        for key in ['api_base', 'api_key']:
+        model_credential = {**model_credential, 'api_base': BAILIAN_LLM_API_BASE}
+        for key in ['api_key']:
             if key not in model_credential:
                 if raise_exception:
                     raise AppApiException(
@@ -90,7 +97,11 @@ class BaiLianLLMModelCredential(BaseForm, BaseModelCredential):
         return True
 
     def encryption_dict(self, model: Dict[str, object]) -> Dict[str, object]:
-        return {**model, 'api_key': super().encryption(model.get('api_key', ''))}
+        return {
+            **model,
+            'api_base': BAILIAN_LLM_API_BASE,
+            'api_key': super().encryption(model.get('api_key', '')),
+        }
 
     def get_model_params_setting_form(self, model_name: str) -> BaiLianLLMModelParams:
         return BaiLianLLMModelParams()

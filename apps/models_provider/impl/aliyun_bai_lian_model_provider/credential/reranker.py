@@ -9,7 +9,10 @@ from common import forms
 from common.exception.app_exception import AppApiException
 from common.forms import BaseForm, PasswordInputField, TooltipLabel
 from models_provider.base_model_provider import BaseModelCredential, ValidCode
-from models_provider.impl.aliyun_bai_lian_model_provider.model.reranker import AliyunBaiLianReranker
+from models_provider.impl.aliyun_bai_lian_model_provider.model.reranker import (
+    BAILIAN_RERANKER_API_BASE,
+    AliyunBaiLianReranker,
+)
 from common.utils.logger import maxkb_logger
 
 
@@ -28,8 +31,12 @@ class AliyunBaiLianRerankerCredential(BaseForm, BaseModelCredential):
     Credential class for the Aliyun BaiLian Reranker model.
     Provides validation and encryption for the model credentials.
     """
-    api_base = forms.TextInputField(_('API URL'), required=True,
-                                    default_value='https://dashscope.aliyuncs.com/api/v1')
+    api_base = forms.TextInputField(
+        _('API URL'),
+        required=True,
+        default_value=BAILIAN_RERANKER_API_BASE,
+        attrs={'disabled': True}
+    )
     dashscope_api_key = PasswordInputField('API Key', required=True)
 
     def is_valid(
@@ -58,6 +65,7 @@ class AliyunBaiLianRerankerCredential(BaseForm, BaseModelCredential):
                 _('{model_type} Model type is not supported').format(model_type=model_type)
             )
 
+        model_credential = {**model_credential, 'api_base': BAILIAN_RERANKER_API_BASE}
         required_keys = ['dashscope_api_key']
         for key in required_keys:
             if key not in model_credential:
@@ -94,6 +102,7 @@ class AliyunBaiLianRerankerCredential(BaseForm, BaseModelCredential):
         """
         return {
             **model,
+            'api_base': BAILIAN_RERANKER_API_BASE,
             'dashscope_api_key': super().encryption(model.get('dashscope_api_key', ''))
         }
 

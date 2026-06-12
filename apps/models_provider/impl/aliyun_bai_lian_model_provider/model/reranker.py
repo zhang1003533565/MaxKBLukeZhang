@@ -7,14 +7,15 @@
     @desc:
 """
 from http import HTTPStatus
-from typing import Sequence, Optional, Any, Dict
+from typing import Sequence, Optional, Dict
 
 import dashscope
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import BaseDocumentCompressor, Document
-from langchain_core.documents import BaseDocumentCompressor
 
 from models_provider.base_model_provider import MaxKBBaseModel
+
+BAILIAN_RERANKER_API_BASE = 'https://dashscope.aliyuncs.com/api/v1'
 
 
 class AliyunBaiLianReranker(MaxKBBaseModel, BaseDocumentCompressor):
@@ -32,7 +33,7 @@ class AliyunBaiLianReranker(MaxKBBaseModel, BaseDocumentCompressor):
     def new_instance(model_type, model_name, model_credential: Dict[str, object], **model_kwargs):
         return AliyunBaiLianReranker(model=model_name,
                                      api_key=model_credential.get('dashscope_api_key'),
-                                     base_url=model_credential.get('api_base') or 'https://dashscope.aliyuncs.com/api/v1',
+                                     base_url=BAILIAN_RERANKER_API_BASE,
                                      top_n=model_kwargs.get('top_n', 3))
 
     def compress_documents(self, documents: Sequence[Document], query: str, callbacks: Optional[Callbacks] = None) -> \

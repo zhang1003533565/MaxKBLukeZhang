@@ -15,7 +15,10 @@ from common.exception.app_exception import AppApiException
 from common.forms import BaseForm, TooltipLabel
 from common.forms.switch_field import SwitchField
 from models_provider.base_model_provider import BaseModelCredential, ValidCode
-from models_provider.impl.aliyun_bai_lian_model_provider.model.embedding import AliyunBaiLianEmbedding
+from models_provider.impl.aliyun_bai_lian_model_provider.model.embedding import (
+    BAILIAN_EMBEDDING_API_BASE,
+    AliyunBaiLianEmbedding,
+)
 from common.utils.logger import maxkb_logger
 
 
@@ -72,7 +75,8 @@ class AliyunBaiLianEmbeddingCredential(BaseForm, BaseModelCredential):
                 ValidCode.valid_error.value,
                 f"{model_type} Model type is not supported"
             )
-        required_keys = ['dashscope_api_key', 'api_base']
+        model_credential = {**model_credential, 'api_base': BAILIAN_EMBEDDING_API_BASE}
+        required_keys = ['dashscope_api_key']
         missing_keys = [key for key in required_keys if key not in model_credential]
         if missing_keys:
             if raise_exception:
@@ -103,11 +107,19 @@ class AliyunBaiLianEmbeddingCredential(BaseForm, BaseModelCredential):
         加密敏感信息
         """
         api_key = model.get('dashscope_api_key', '')
-        return {**model, 'dashscope_api_key': super().encryption(api_key)}
+        return {
+            **model,
+            'api_base': BAILIAN_EMBEDDING_API_BASE,
+            'dashscope_api_key': super().encryption(api_key),
+        }
 
     def get_model_params_setting_form(self, model_name):
         return BaiLianEmbeddingModelParams()
 
-    api_base = forms.TextInputField(_('API URL'), required=True,
-                                    default_value='https://dashscope.aliyuncs.com/compatible-mode/v1')
+    api_base = forms.TextInputField(
+        _('API URL'),
+        required=True,
+        default_value=BAILIAN_EMBEDDING_API_BASE,
+        attrs={'disabled': True}
+    )
     dashscope_api_key = forms.PasswordInputField('API Key', required=True)
