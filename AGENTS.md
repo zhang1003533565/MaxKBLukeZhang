@@ -1,0 +1,61 @@
+# AGENTS.md - MaxKB
+
+本文件面向 Codex AI。
+目标：让 Codex 在 MaxKB 项目中遵守统一编码规则，并在修改代码后执行相应校验。
+
+## 全局编码规则
+
+- 修改代码前，先给出简短计划。
+- 优先最小改动，避免大面积重构。
+- 保持现有代码风格，不要擅自改命名风格、目录边界或架构分层。
+- 本项目当前默认作为“知识库单体”使用；未经明确要求，不要恢复应用、聊天、触发器、工具等智能体入口。
+- 非必要，不允许修改数据库结构；需要新增或修改迁移时必须说明原因和影响范围。
+- 未经允许，不要新增依赖。
+- 未经允许，不要删除已有功能；如需裁剪能力，优先用开关隔离并保留可回退路径。
+- 改完后必须自检，说明改了哪些文件、为什么改、跑了哪些检查。
+- 如果需求不明确且会影响实现方向，先提问；低风险、可回退的小改动可以直接推进。
+- 遇到更深目录的 `AGENTS.md`，以更深目录规则为准。
+
+如果读取了这个文件，每次开始工作前，打印以下内容：
+
+```text
+╔══════════════════════════════╗
+║  我已知晓 MaxKB 全局编码规则    ║
+║  RULES LOADED SUCCESSFULLY   ║
+╚══════════════════════════════╝
+```
+
+## 自动校验
+
+本仓库提供提交前校验脚本：
+
+```bash
+./scripts/validate-code-rules.sh
+```
+
+当前项目已配置本地 Git hooks 路径为 `.githooks` 时，提交会自动运行 `.githooks/pre-commit`。
+
+校验规则：
+
+- Shell 脚本改动：运行 `bash -n`。
+- Python 后端改动：优先运行 `.venv/bin/ruff check` 和 Django `manage.py check`。
+- 前端 `ui/` 改动：在依赖已安装时运行 `npm run type-check`，并对变更的 `ts/vue` 文件运行 ESLint。
+- 缺少本地依赖时不自动安装，只提示跳过，避免提交钩子产生隐式环境变更。
+
+## 提交信息规则
+
+提交信息使用简短中文标题，必要时使用 Lore trailers 记录决策：
+
+```text
+fix: 简短说明为什么改
+
+Constraint: 约束
+Rejected: 被拒方案 | 原因
+Confidence: low|medium|high
+Scope-risk: narrow|moderate|broad
+Directive: 后续修改注意事项
+Tested: 已验证内容
+Not-tested: 未验证内容
+Co-authored-by: OmX <omx@oh-my-codex.dev>
+```
+
