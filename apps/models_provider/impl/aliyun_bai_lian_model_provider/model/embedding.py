@@ -7,11 +7,14 @@
     @desc:
 """
 from http import HTTPStatus
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from openai import OpenAI
 
 from models_provider.base_model_provider import MaxKBBaseModel
+
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".ico")
+VIDEO_SUFFIXES = (".mp4", ".avi", ".mov", ".mpeg", ".mpg", ".webm", ".flv", ".mkv")
 
 
 class AliyunBaiLianEmbedding(MaxKBBaseModel):
@@ -44,19 +47,54 @@ class AliyunBaiLianEmbedding(MaxKBBaseModel):
         res = self.embed_documents([text])
         return res[0]
 
+    @staticmethod
+    def _looks_like_media_url(value: str, suffixes: tuple[str, ...]):
+        lower_value = value.lower().split("?", 1)[0]
+        return lower_value.startswith(("http://", "https://")) and lower_value.endswith(suffixes)
+
+    @staticmethod
+    def _to_multimodal_content(value: Any):
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, (list, tuple)):
+            return {"multi_images": list(value)}
+        text = str(value)
+        if text.startswith("data:image/") or AliyunBaiLianEmbedding._looks_like_media_url(text, IMAGE_SUFFIXES):
+            return {"image": text}
+        if text.startswith("data:video/") or AliyunBaiLianEmbedding._looks_like_media_url(text, VIDEO_SUFFIXES):
+            return {"video": text}
+        return {"text": text}
+
+    def _is_multimodal_model(self):
+        return any(k in self.model_name for k in ("vl-embedding", "embedding-vision", "multimodal"))
+
+    def _dashscope_api_base(self):
+        if "compatible-mode" in self.api_base:
+            return "https://dashscope.aliyuncs.com/api/v1"
+        return self.api_base or "https://dashscope.aliyuncs.com/api/v1"
+
+    def _multimodal_optional_params(self):
+        params = dict(self.optional_params)
+        if "dimensions" in params and "dimension" not in params:
+            params["dimension"] = params.pop("dimensions")
+        if "dimension" in params:
+            params["dimension"] = int(params["dimension"])
+        if self.model_name != "qwen3-vl-embedding" or not params.get("enable_fusion"):
+            params.pop("enable_fusion", None)
+        return params
+
     def embed_documents(
-            self, texts: List[str], chunk_size: int | None = None
+            self, texts: List[Any], chunk_size: int | None = None
     ) -> List[List[float]]:
         # 处理多模态的向量化
-        if any(k in self.model_name for k in ("vl-embedding", "embedding-vision", "multimodal")):
+        if self._is_multimodal_model():
             import dashscope
             dashscope.api_key = self.api_key
-            dashscope.base_http_api_url = self.api_base
-            multimodal_input = [{"text": text} for text in texts]
+            dashscope.base_http_api_url = self._dashscope_api_base()
             resp = dashscope.MultiModalEmbedding.call(
                 model=self.model_name,
-                input=multimodal_input,  # type: ignore
-                **self.optional_params
+                input={"contents": [self._to_multimodal_content(text) for text in texts]},  # type: ignore
+                **self._multimodal_optional_params()
             )
 
             if resp.status_code == HTTPStatus.OK:

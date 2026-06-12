@@ -13,6 +13,7 @@
 - 未经允许，不要新增依赖。
 - 未经允许，不要删除已有功能；如需裁剪能力，优先用开关隔离并保留可回退路径。
 - 改完后必须自检，说明改了哪些文件、为什么改、跑了哪些检查。
+- 除非用户明确要求提交或推送，否则 Codex 只修改文件和运行校验，不执行 `git add`、`git commit` 或 `git push`。
 - 如果需求不明确且会影响实现方向，先提问；低风险、可回退的小改动可以直接推进。
 - 遇到更深目录的 `AGENTS.md`，以更深目录规则为准。
 
@@ -41,21 +42,3 @@
 - Python 后端改动：优先运行 `.venv/bin/ruff check` 和 Django `manage.py check`。
 - 前端 `ui/` 改动：在依赖已安装时运行 `npm run type-check`，并对变更的 `ts/vue` 文件运行 ESLint。
 - 缺少本地依赖时不自动安装，只提示跳过，避免提交钩子产生隐式环境变更。
-
-## 提交信息规则
-
-提交信息使用简短中文标题，必要时使用 Lore trailers 记录决策：
-
-```text
-fix: 简短说明为什么改
-
-Constraint: 约束
-Rejected: 被拒方案 | 原因
-Confidence: low|medium|high
-Scope-risk: narrow|moderate|broad
-Directive: 后续修改注意事项
-Tested: 已验证内容
-Not-tested: 未验证内容
-Co-authored-by: OmX <omx@oh-my-codex.dev>
-```
-

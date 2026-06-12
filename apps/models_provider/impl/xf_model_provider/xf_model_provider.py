@@ -25,7 +25,6 @@ from models_provider.impl.xf_model_provider.model.llm import XFChatSparkLLM
 from models_provider.impl.xf_model_provider.model.stt import XFSparkSpeechToText
 from models_provider.impl.xf_model_provider.model.tts import XFSparkTextToSpeech
 from models_provider.impl.xf_model_provider.model.tts.super_humanoid_tts import XFSparkSuperHumanoidTextToSpeech
-from models_provider.impl.xf_model_provider.model.tts.default_tts import XFSparkDefaultTextToSpeech
 from maxkb.conf import PROJECT_DIR
 from django.utils.translation import gettext as _
 
@@ -58,18 +57,13 @@ model_info_list = [
     ModelInfo('embedding', '', ModelTypeConst.EMBEDDING, embedding_model_credential, XFEmbedding)
 ]
 
+knowledge_model_info_list = model_info_list[:3] + [model_info_list[7]]
+
 model_info_manage = (
     ModelInfoManage.builder()
-    .append_model_info_list(model_info_list)
+    .append_model_info_list(knowledge_model_info_list)
     .append_default_model_info(
         ModelInfo('generalv3.5', '', ModelTypeConst.LLM, xunfei_model_credential, XFChatSparkLLM))
-    .append_default_model_info(
-        ModelInfo('iat', _('Chinese and English recognition'), ModelTypeConst.STT, stt_model_credential,
-                  XFSparkSpeechToText),
-    )
-    # default TTS 工厂入口
-    .append_default_model_info(
-        ModelInfo('default', _('default'), ModelTypeConst.TTS, default_tts_credential, XFSparkDefaultTextToSpeech))
     .append_default_model_info(
         ModelInfo('embedding', '', ModelTypeConst.EMBEDDING, embedding_model_credential, XFEmbedding))
     .build()
@@ -82,6 +76,6 @@ class XunFeiModelProvider(IModelProvider):
         return model_info_manage
 
     def get_model_provide_info(self):
-        return ModelProvideInfo(provider='model_xf_provider', name=_('iFlytek Spark'), icon=get_file_content(
+        return ModelProvideInfo(provider='model_xf_provider', name=_('讯飞星火'), icon=get_file_content(
             os.path.join(PROJECT_DIR, "apps", 'models_provider', 'impl', 'xf_model_provider', 'icon',
                          'xf_icon_svg')))

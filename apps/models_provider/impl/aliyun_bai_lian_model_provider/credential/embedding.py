@@ -13,6 +13,7 @@ from django.utils.translation import gettext as _
 from common import forms
 from common.exception.app_exception import AppApiException
 from common.forms import BaseForm, TooltipLabel
+from common.forms.switch_field import SwitchField
 from models_provider.base_model_provider import BaseModelCredential, ValidCode
 from models_provider.impl.aliyun_bai_lian_model_provider.model.embedding import AliyunBaiLianEmbedding
 from common.utils.logger import maxkb_logger
@@ -29,10 +30,25 @@ class BaiLianEmbeddingModelParams(BaseForm):
         value_field='value',
         text_field='label',
         option_list=[
+            {'label': '2560', 'value': '2560'},
+            {'label': '2048', 'value': '2048'},
+            {'label': '1536', 'value': '1536'},
+            {'label': '1152', 'value': '1152'},
             {'label': '1024', 'value': '1024'},
             {'label': '768', 'value': '768'},
             {'label': '512', 'value': '512'},
+            {'label': '256', 'value': '256'},
+            {'label': '128', 'value': '128'},
+            {'label': '64', 'value': '64'},
         ]
+    )
+    enable_fusion = SwitchField(
+        TooltipLabel(
+            _('Enable Fusion'),
+            _('Only qwen3-vl-embedding uses this switch to merge multimodal inputs into one vector.')
+        ),
+        attrs={"active-value": True, "inactive-value": False},
+        default_value=False,
     )
 
 

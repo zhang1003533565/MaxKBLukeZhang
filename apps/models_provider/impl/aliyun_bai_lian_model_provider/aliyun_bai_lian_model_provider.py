@@ -43,7 +43,6 @@ from models_provider.impl.aliyun_bai_lian_model_provider.model.stt.omni_stt impo
 from models_provider.impl.aliyun_bai_lian_model_provider.model.reranker import AliyunBaiLianReranker
 from models_provider.impl.aliyun_bai_lian_model_provider.model.stt import (
     AliyunBaiLianSpeechToText,
-    AliyunBaiLianDefaultSpeechToText,
 )
 from models_provider.impl.aliyun_bai_lian_model_provider.model.tti import QwenTextToImageModel
 from models_provider.impl.aliyun_bai_lian_model_provider.model.tts import AliyunBaiLianTextToSpeech
@@ -98,6 +97,34 @@ model_info_list = [
         _(
             "Universal text vector is Tongyi Lab's multi-language text unified vector model based on the LLM base. It provides high-level vector services for multiple mainstream languages around the world and helps developers quickly convert text data into high-quality vector data."
         ),
+        ModelTypeConst.EMBEDDING,
+        aliyun_bai_lian_embedding_model_credential,
+        AliyunBaiLianEmbedding,
+    ),
+    ModelInfo(
+        "qwen3-vl-embedding",
+        _("Qwen multimodal embedding model. It supports text, image, video, and multi-image vectorization."),
+        ModelTypeConst.EMBEDDING,
+        aliyun_bai_lian_embedding_model_credential,
+        AliyunBaiLianEmbedding,
+    ),
+    ModelInfo(
+        "qwen2.5-vl-embedding",
+        _("Qwen multimodal embedding model. It supports text, image, video, and multi-image vectorization."),
+        ModelTypeConst.EMBEDDING,
+        aliyun_bai_lian_embedding_model_credential,
+        AliyunBaiLianEmbedding,
+    ),
+    ModelInfo(
+        "tongyi-embedding-vision-plus-2026-03-06",
+        _("Tongyi multimodal embedding model. It supports text, image, video, and fused vectors."),
+        ModelTypeConst.EMBEDDING,
+        aliyun_bai_lian_embedding_model_credential,
+        AliyunBaiLianEmbedding,
+    ),
+    ModelInfo(
+        "tongyi-embedding-vision-flash-2026-03-06",
+        _("Tongyi multimodal embedding model. It supports text, image, video, and fused vectors."),
         ModelTypeConst.EMBEDDING,
         aliyun_bai_lian_embedding_model_credential,
         AliyunBaiLianEmbedding,
@@ -201,31 +228,18 @@ module_info_itv_list = [
     ModelInfo("wanx2.1-i2v-turbo", "", ModelTypeConst.ITV, aliyun_bai_lian_itv_model_credential, GenerationVideoModel),
 ]
 
+knowledge_reranker_model_info_list = [model_info_list[0]]
+knowledge_embedding_model_info_list = model_info_list[3:8]
+knowledge_llm_model_info_list = model_info_list[8:14]
+
 model_info_manage = (
     ModelInfoManage.builder()
-    .append_model_info_list(model_info_list)
-    .append_model_info_list(module_info_vl_list)
-    .append_default_model_info(module_info_vl_list[0])
-    .append_model_info_list(module_info_tti_list)
-    .append_default_model_info(module_info_tti_list[0])
-    .append_default_model_info(model_info_list[1])
-    .append_default_model_info(model_info_list[2])
-    .append_default_model_info(
-        ModelInfo(
-            "default",
-            _("default"),
-            ModelTypeConst.STT,
-            aliyun_bai_lian_default_stt_model_credential,
-            AliyunBaiLianDefaultSpeechToText,
-        )
-    )
-    .append_default_model_info(model_info_list[3])
-    .append_default_model_info(model_info_list[4])
-    .append_default_model_info(model_info_list[0])
-    .append_model_info_list(model_info_ttv_list)
-    .append_default_model_info(model_info_ttv_list[0])
-    .append_model_info_list(module_info_itv_list)
-    .append_default_model_info(module_info_itv_list[0])
+    .append_model_info_list(knowledge_llm_model_info_list)
+    .append_model_info_list(knowledge_embedding_model_info_list)
+    .append_model_info_list(knowledge_reranker_model_info_list)
+    .append_default_model_info(knowledge_llm_model_info_list[0])
+    .append_default_model_info(knowledge_embedding_model_info_list[0])
+    .append_default_model_info(knowledge_reranker_model_info_list[0])
     .build()
 )
 
@@ -237,7 +251,7 @@ class AliyunBaiLianModelProvider(IModelProvider):
     def get_model_provide_info(self):
         return ModelProvideInfo(
             provider="aliyun_bai_lian_model_provider",
-            name=gettext("Alibaba Cloud Bailian"),
+            name=gettext("通义千问（阿里云百炼）"),
             icon=get_file_content(
                 os.path.join(
                     PROJECT_DIR,
