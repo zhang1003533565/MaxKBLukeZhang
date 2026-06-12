@@ -44,6 +44,7 @@ urlpatterns = [
     path(admin_api_prefix, include("knowledge.urls")),
     path(admin_api_prefix, include("system_manage.urls")),
     path(admin_api_prefix, include("oss.urls")),
+    path("openapi/knowledge/v1/", include("knowledge.open_api.urls")),
     path(f'{admin_ui_prefix[1:]}/', include('oss.retrieval_urls')),
 ]
 

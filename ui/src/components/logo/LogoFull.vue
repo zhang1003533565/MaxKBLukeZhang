@@ -55,11 +55,11 @@
         />
       </g>
     </svg>
-    <img v-else src="@/assets/logo/MaxKB-logo.svg" :height="height" />
+    <img v-else src="@/assets/logo/lumoskb-logo.svg" :height="height" />
   </template>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import useStore from '@/stores'
 defineOptions({ name: 'LogoFull' })
 

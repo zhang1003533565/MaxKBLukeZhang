@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: ${LUMOSKB_PROJECT:-lumoskb}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-lumoskb}
+      POSTGRES_USER: ${POSTGRES_USER:-lumoskb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-1000}
+    command: postgres -c max_connections=${POSTGRES_MAX_CONNECTIONS:-1000} -c jit=off
+    volumes:
+      - lumoskb-postgres:/var/lib/postgresql/data
+      - ../docker/dev/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lumoskb} -d ${POSTGRES_DB:-lumoskb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${LUMOSKB_PROJECT:-lumoskb}-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - lumoskb-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  app:
+    image: ${LUMOSKB_IMAGE:-ghcr.io/zhang1003533565/lumoskb:latest}
+    build:
+      context: ..
+      dockerfile: installer/Dockerfile
+      args:
+        DOCKER_IMAGE_TAG: ${MAXKB_VERSION:-lumoskb-server}
+    container_name: ${LUMOSKB_PROJECT:-lumoskb}-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      MAXKB_CONFIG: ${MAXKB_CONFIG:-ENV}
+      MAXKB_CONFIG_TYPE: ${MAXKB_CONFIG_TYPE:-ENV}
+      MAXKB_VERSION: ${MAXKB_VERSION:-lumoskb-server}
+      MAXKB_DEBUG: ${MAXKB_DEBUG:-false}
+      MAXKB_LOG_LEVEL: ${MAXKB_LOG_LEVEL:-INFO}
+      MAXKB_KNOWLEDGE_ONLY: ${MAXKB_KNOWLEDGE_ONLY:-true}
+      MAXKB_SECRET_KEY: ${MAXKB_SECRET_KEY:?MAXKB_SECRET_KEY is required}
+      MAXKB_DEFAULT_PASSWORD: ${MAXKB_DEFAULT_PASSWORD:-LumosKB@123..}
+      MAXKB_DB_NAME: ${POSTGRES_DB:-lumoskb}
+      MAXKB_DB_HOST: postgres
+      MAXKB_DB_PORT: 5432
+      MAXKB_DB_USER: ${POSTGRES_USER:-lumoskb}
+      MAXKB_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      MAXKB_DB_MAX_OVERFLOW: ${MAXKB_DB_MAX_OVERFLOW:-80}
+      MAXKB_REDIS_HOST: redis
+      MAXKB_REDIS_PORT: 6379
+      MAXKB_REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      MAXKB_REDIS_DB: ${MAXKB_REDIS_DB:-0}
+      MAXKB_REDIS_MAX_CONNECTIONS: ${MAXKB_REDIS_MAX_CONNECTIONS:-100}
+      MAXKB_CORE_WORKER: ${MAXKB_CORE_WORKER:-2}
+    ports:
+      - "${LUMOSKB_PORT:-8080}:8080"
+    volumes:
+      - lumoskb-data:/opt/maxkb
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/admin/', timeout=5)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+volumes:
+  lumoskb-postgres:
+  lumoskb-redis:
+  lumoskb-data:

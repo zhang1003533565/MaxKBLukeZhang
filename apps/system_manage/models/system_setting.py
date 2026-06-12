@@ -20,6 +20,8 @@ class SettingType(models.IntegerChoices):
 
     LOG = 2, "日志清理时间"
 
+    KNOWLEDGE_OPEN_API = 3, "知识库开放 API"
+
 
 class SystemSetting(AppModelMixin):
     """

@@ -1,8 +1,8 @@
 [project]
-name = "maxkb"
+name = "lumoskb"
 version = "2.0.0"
-description = "强大易用的开源企业级智能体平台"
-authors = [{ name = "shaohuzhang1", email = "shaohu.zhang@fit2cloud.com" }]
+description = "流光小队的项目知识库中枢"
+authors = [{ name = "Team Lumos", email = "dev@lumos.local" }]
 requires-python = "~=3.11.0"
 readme = "README.md"
 dependencies = [

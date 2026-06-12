@@ -4,8 +4,31 @@ import { ComplexPermission } from '@/utils/permission/type'
 const systemRouter = {
   path: '/system',
   name: 'system',
-  meta: { title: 'views.system.title' },
-  hidden: true,
+  meta: {
+    title: 'views.system.title',
+    menu: true,
+    permission: [
+      RoleConst.ADMIN,
+      RoleConst.USER.getWorkspaceRole,
+      RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
+      PermissionConst.SYSTEM_API_KEY_EDIT,
+      PermissionConst.USER_READ,
+      PermissionConst.WORKSPACE_READ,
+      PermissionConst.WORKSPACE_WORKSPACE_READ.getWorkspacePermission,
+      PermissionConst.ROLE_READ,
+      PermissionConst.WORKSPACE_ROLE_READ.getWorkspacePermission,
+      PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
+      PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ
+        .getWorkspacePermissionWorkspaceManageRole,
+      PermissionConst.MODEL_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
+      PermissionConst.MODEL_WORKSPACE_USER_RESOURCE_PERMISSION_READ
+        .getWorkspacePermissionWorkspaceManageRole,
+    ],
+    icon: 'app-setting',
+    iconActive: 'app-setting-active',
+    order: 8,
+  },
+  redirect: '/system/user',
   component: () => import('@/layout/layout-template/SystemMainLayout.vue'),
   children: [
     {
@@ -222,6 +245,26 @@ const systemRouter = {
           component: () => import('@/views/system/resource-authorization/index.vue'),
         },
       ],
+    },
+    {
+      path: '/system/open-api',
+      name: 'knowledgeOpenAPI',
+      meta: {
+        icon: 'Connection',
+        iconActive: 'Connection',
+        title: 'views.system.knowledgeOpenAPI.title',
+        activeMenu: '/system',
+        parentPath: '/system',
+        parentName: 'system',
+        sameRoute: 'knowledgeOpenAPI',
+        permission: [
+          RoleConst.ADMIN,
+          RoleConst.USER.getWorkspaceRole,
+          RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
+          PermissionConst.SYSTEM_API_KEY_EDIT,
+        ],
+      },
+      component: () => import('@/views/system/open-api/index.vue'),
     },
     {
       path: '/system/shared',

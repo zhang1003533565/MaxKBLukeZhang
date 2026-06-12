@@ -1,67 +1,217 @@
-<p align="center"><img src= "https://github.com/1Panel-dev/maxkb/assets/52996290/c0694996-0eed-40d8-b369-322bf2a380bf" alt="MaxKB" width="300" /></p>
-<h3 align="center">Open-source platform for building enterprise-grade agents</h3>
-<h3 align="center">强大易用的企业级智能体平台</h3>
-<p align="center"><a href="https://trendshift.io/repositories/9113" target="_blank"><img src="https://trendshift.io/api/badge/repositories/9113" alt="1Panel-dev%2FMaxKB | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a></p>
 <p align="center">
-  <a href="https://www.gnu.org/licenses/gpl-3.0.html#license-text"><img src="https://img.shields.io/github/license/1Panel-dev/maxkb?color=%231890FF" alt="License: GPL v3"></a>
-  <a href="https://github.com/1Panel-dev/maxkb/releases/latest"><img src="https://img.shields.io/github/v/release/1Panel-dev/maxkb" alt="Latest release"></a>
-  <a href="https://github.com/1Panel-dev/maxkb"><img src="https://img.shields.io/github/stars/1Panel-dev/maxkb?color=%231890FF&style=flat-square" alt="Stars"></a>    
-  <a href="https://hub.docker.com/r/1panel/maxkb"><img src="https://img.shields.io/docker/pulls/1panel/maxkb?label=downloads" alt="Download"></a><br/>
- [<a href="/README_CN.md">中文(简体)</a>] | [<a href="/README.md">English</a>] 
+  <img src="./ui/src/assets/logo/lumoskb-logo.svg" alt="LumosKB" width="360" />
 </p>
-<hr/>
 
-MaxKB = Max Knowledge Brain, it is an open-source platform for building enterprise-grade agents. MaxKB integrates Retrieval-Augmented Generation (RAG) pipelines, supports robust workflows, and provides advanced MCP tool-use capabilities. MaxKB is widely applied in scenarios such as intelligent customer service, corporate internal knowledge bases, academic research, and education.
+<h3 align="center">流光小队的项目知识库中枢</h3>
 
-- **RAG Pipeline**: Supports direct uploading of documents / automatic crawling of online documents, with features for automatic text splitting, vectorization. This effectively reduces hallucinations in large models, providing a superior smart Q&A interaction experience.
-- **Agentic Workflow**: Equipped with a powerful workflow engine, function library and MCP tool-use, enabling the orchestration of AI processes to meet the needs of complex business scenarios.
-- **Seamless Integration**: Facilitates zero-coding rapid integration into third-party business systems, quickly equipping existing systems with intelligent Q&A capabilities to enhance user satisfaction.
-- **Model-Agnostic**: Supports various large models, including private models (such as DeepSeek, Llama, Qwen, etc.) and public models (like OpenAI, Claude, Gemini, MiniMax, etc.).
-- **Multi Modal**: Native support for input and output text, image, audio and video.
+---
 
-## Quick start
+## 项目定位
 
-Execute the script below to start a MaxKB container using Docker:
+LumosKB 是流光小队维护的知识库系统，当前项目目标是保留干净的知识库能力：知识库管理、文档上传、分段、向量化、召回测试、简单聊天测试、用户与工作区隔离，以及对外开放的知识库 API。
+
+当前项目不作为智能体平台使用，默认不暴露应用、工作流、触发器、工具等入口。
+
+## 核心能力
+
+- 知识库：创建项目知识库，上传文档，管理分段、问题、自定义分词和设置。
+- 检索测试：在知识库内直接做召回测试，查看命中的分段与图片内容。
+- 聊天测试：选择知识库和 LLM 模型，将检索内容交给模型，用来验证项目知识库反馈。
+- 用户/工作区：用用户和工作区隔离不同项目的知识库。
+- 开放 API：生成 API Key 后，可从外部系统上传文档、查看知识库、查看文档分段、执行召回测试。
+- 一键部署：服务器上可用脚本拉起应用、PostgreSQL + pgvector、Redis。
+- 自动发布：推送到 GitHub `main` 后，可自动构建镜像并 SSH 更新线上服务。
+
+## 本地开发
+
+推荐一条命令启动开发环境：
 
 ```bash
-docker run -d --name=maxkb --restart=always -p 8080:8080 -v ~/.maxkb:/opt/maxkb 1panel/maxkb
+./scripts/dev-all.sh
 ```
 
-Access MaxKB web interface at `http://your_server_ip:8080` with default admin credentials:
+启动后访问：
 
-- username: admin
-- password: MaxKB@123..
+- 管理端：http://localhost:3000/admin
+- 后端：http://localhost:8080
 
-中国用户如遇到 Docker 镜像 Pull 失败问题，请参照该 [离线安装文档](https://maxkb.cn/docs/v2/installation/offline_installtion/) 进行安装。
+常用开发命令：
 
-## Screenshots
+```bash
+./scripts/dev-deps-up.sh      # 只启动 PostgreSQL 和 Redis
+./scripts/dev-backend.sh      # 只启动后端
+./scripts/dev-celery.sh       # 只启动任务队列
+./scripts/dev-frontend-admin.sh
+```
 
-<table style="border-collapse: collapse; border: 1px solid black;">
-  <tr>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/eb285512-a66a-4752-8941-c65ed1592238" alt="MaxKB Demo1"   /></td>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/f732f1f5-472c-4fd2-93c1-a277eda83d04" alt="MaxKB Demo2"   /></td>
-  </tr>
-  <tr>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/c927474a-9a23-4830-822f-5db26025c9b2" alt="MaxKB Demo3"   /></td>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/e6268996-a46d-4e58-9f30-31139df78ad2" alt="MaxKB Demo4"   /></td>
-  </tr>
-</table>
+代码校验：
 
-## Technical stack
+```bash
+./scripts/validate-code-rules.sh
+```
 
-- Frontend：[Vue.js](https://vuejs.org/)
-- Backend：[Python / Django](https://www.djangoproject.com/)
-- LLM Framework：[LangChain](https://www.langchain.com/)
-- Database：[PostgreSQL + pgvector](https://www.postgresql.org/)
+## 服务器一键部署
 
-## Star History
+服务器需要先安装 Docker 和 Docker Compose。首次部署可以直接执行：
 
-[![Star History Chart](https://api.star-history.com/svg?repos=1Panel-dev/MaxKB&type=Date)](https://star-history.com/#1Panel-dev/MaxKB&Date)
+```bash
+git clone git@github.com:zhang1003533565/MaxKBLukeZhang.git /opt/lumoskb
+cd /opt/lumoskb
+./scripts/server-deploy.sh
+```
 
-## License
+脚本会自动创建 `deploy/.env`，并生成数据库密码、Redis 密码和 Django Secret Key。
 
-Licensed under The GNU General Public License version 3 (GPLv3)  (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+默认访问：
 
-<https://www.gnu.org/licenses/gpl-3.0.html>
+```text
+http://服务器IP:8080/admin
+```
 
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+默认管理员：
+
+```text
+用户名：admin
+密码：LumosKB@123..
+```
+
+首次启动后建议立刻修改管理员密码。
+
+## 生产配置
+
+生产配置文件位于：
+
+```text
+deploy/.env
+```
+
+常用配置：
+
+```dotenv
+LUMOSKB_PORT=8080
+LUMOSKB_IMAGE=ghcr.io/zhang1003533565/lumoskb:latest
+POSTGRES_DB=lumoskb
+POSTGRES_USER=lumoskb
+POSTGRES_PASSWORD=自动生成
+REDIS_PASSWORD=自动生成
+MAXKB_SECRET_KEY=自动生成
+MAXKB_DEFAULT_PASSWORD=LumosKB@123..
+MAXKB_KNOWLEDGE_ONLY=true
+```
+
+从服务器源码重新构建并部署：
+
+```bash
+./scripts/server-deploy.sh --local
+```
+
+从镜像仓库拉取并部署：
+
+```bash
+./scripts/server-deploy.sh --pull
+```
+
+查看服务状态：
+
+```bash
+./scripts/server-deploy.sh --status
+```
+
+## GitHub 自动构建和部署
+
+已添加工作流：
+
+```text
+.github/workflows/lumoskb-deploy.yml
+```
+
+它会在推送到 `main` 后构建 Docker 镜像并推送到 GHCR：
+
+```text
+ghcr.io/<github-owner>/lumoskb:<commit-sha>
+ghcr.io/<github-owner>/lumoskb:latest
+```
+
+要启用自动 SSH 部署，需要在 GitHub 仓库配置：
+
+Repository Variables：
+
+```text
+ENABLE_SERVER_DEPLOY=true
+SERVER_DEPLOY_PATH=/opt/lumoskb
+```
+
+Repository Secrets：
+
+```text
+SERVER_HOST=服务器 IP 或域名
+SERVER_USER=服务器用户名
+SERVER_SSH_KEY=服务器 SSH 私钥
+SERVER_PORT=22
+```
+
+服务器上需要提前存在仓库目录：
+
+```bash
+git clone git@github.com:zhang1003533565/MaxKBLukeZhang.git /opt/lumoskb
+cd /opt/lumoskb
+./scripts/server-deploy.sh --pull
+```
+
+如果 GHCR 镜像保持私有，服务器还需要先登录镜像仓库：
+
+```bash
+echo "<github_token>" | docker login ghcr.io -u "<github_username>" --password-stdin
+```
+
+之后推送到 `main`，GitHub Actions 会自动：
+
+1. 构建镜像。
+2. 推送到 GHCR。
+3. SSH 到服务器。
+4. 更新服务器代码到当前提交。
+5. 写入最新镜像地址。
+6. 执行 `DEPLOY_MODE=pull ./scripts/server-deploy.sh`。
+
+## 开放 API
+
+管理端进入：
+
+```text
+系统设置 -> 开放 API
+```
+
+生成 API Key 后，外部系统通过以下方式访问：
+
+```http
+Authorization: Bearer <api_key>
+```
+
+基础路径：
+
+```text
+/openapi/knowledge/v1/workspaces/{workspace_id}
+```
+
+接口能力：
+
+- `GET /knowledges`：获取知识库列表
+- `GET /knowledges/{knowledge_id}`：获取知识库详情
+- `GET /knowledges/{knowledge_id}/documents`：获取文档列表
+- `POST /knowledges/{knowledge_id}/documents/upload`：上传文档
+- `GET /knowledges/{knowledge_id}/documents/{document_id}/paragraphs`：获取文档分段
+- `POST /hit-test`：召回测试
+
+开放 API 的权限绑定到生成密钥的用户和当前工作区，不会跨项目访问其他工作区知识库。
+
+## 技术栈
+
+- 前端：Vue 3 + TypeScript + Vite + Element Plus
+- 后端：Python 3.11 + Django
+- 数据库：PostgreSQL + pgvector
+- 缓存与任务队列：Redis + Celery
+- 部署：Docker Compose + GitHub Actions
+
+## 许可证
+
+本项目基于原开源项目改造，仍遵循 GPLv3 协议。
