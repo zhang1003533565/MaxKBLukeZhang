@@ -15,14 +15,14 @@ from models_provider.base_model_provider import (
     ModelProvideInfo,
     ModelTypeConst,
 )
-from models_provider.impl.kimi_model_provider.credential.llm import KimiLLMModelCredential
-from models_provider.impl.kimi_model_provider.model.llm import KimiChatModel
+from models_provider.impl.xiaomi_mimo_model_provider.credential.llm import XiaomiMiMoLLMModelCredential
+from models_provider.impl.xiaomi_mimo_model_provider.model.llm import XiaomiMiMoChatModel
 
-xiaomi_mimo_llm_model_credential = KimiLLMModelCredential()
+xiaomi_mimo_llm_model_credential = XiaomiMiMoLLMModelCredential()
 
 xiaomi_mimo_llm_list = [
-    ModelInfo("MiMo-V2.5-Pro", "", ModelTypeConst.LLM, xiaomi_mimo_llm_model_credential, KimiChatModel),
-    ModelInfo("MiMo-V2.5", "", ModelTypeConst.LLM, xiaomi_mimo_llm_model_credential, KimiChatModel),
+    ModelInfo("MiMo-V2.5-Pro", "", ModelTypeConst.LLM, xiaomi_mimo_llm_model_credential, XiaomiMiMoChatModel),
+    ModelInfo("MiMo-V2.5", "", ModelTypeConst.LLM, xiaomi_mimo_llm_model_credential, XiaomiMiMoChatModel),
 ]
 
 model_info_manage = (

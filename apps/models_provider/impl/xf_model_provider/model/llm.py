@@ -16,6 +16,13 @@ from langchain_core.outputs import ChatGenerationChunk
 
 from models_provider.base_model_provider import MaxKBBaseModel
 
+XUNFEI_LLM_API_URL_MAP = {
+    'generalv3.5': 'wss://spark-api.xf-yun.com/v3.5/chat',
+    'generalv3': 'wss://spark-api.xf-yun.com/v3.1/chat',
+    'generalv2': 'wss://spark-api.xf-yun.com/v2.1/chat',
+}
+XUNFEI_DEFAULT_LLM_API_URL = XUNFEI_LLM_API_URL_MAP['generalv3.5']
+
 
 class XFChatSparkLLM(MaxKBBaseModel, ChatSparkLLM):
     @staticmethod
@@ -29,7 +36,7 @@ class XFChatSparkLLM(MaxKBBaseModel, ChatSparkLLM):
             spark_app_id=model_credential.get('spark_app_id'),
             spark_api_key=model_credential.get('spark_api_key'),
             spark_api_secret=model_credential.get('spark_api_secret'),
-            spark_api_url=model_credential.get('spark_api_url'),
+            spark_api_url=XUNFEI_LLM_API_URL_MAP.get(model_name, XUNFEI_DEFAULT_LLM_API_URL),
             spark_llm_domain=model_name,
             streaming=model_kwargs.get('streaming', False),
             **optional_params

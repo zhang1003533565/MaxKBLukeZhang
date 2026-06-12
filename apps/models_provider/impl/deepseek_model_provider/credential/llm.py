@@ -16,6 +16,7 @@ from common.exception.app_exception import AppApiException
 from common.forms import BaseForm, TooltipLabel
 from models_provider.base_model_provider import BaseModelCredential, ValidCode
 from common.utils.logger import maxkb_logger
+from models_provider.impl.deepseek_model_provider.model.llm import DEEPSEEK_API_BASE
 
 
 class DeepSeekLLMModelParams(BaseForm):
@@ -46,7 +47,8 @@ class DeepSeekLLMModelCredential(BaseForm, BaseModelCredential):
             raise AppApiException(ValidCode.valid_error.value,
                                   gettext('{model_type} Model type is not supported').format(model_type=model_type))
 
-        for key in ['api_key', 'api_base']:
+        model_credential = {**model_credential, 'api_base': DEEPSEEK_API_BASE}
+        for key in ['api_key']:
             if key not in model_credential:
                 if raise_exception:
                     raise AppApiException(ValidCode.valid_error.value, gettext('{key}  is required').format(key=key))
@@ -69,10 +71,15 @@ class DeepSeekLLMModelCredential(BaseForm, BaseModelCredential):
         return True
 
     def encryption_dict(self, model: Dict[str, object]):
-        return {**model, 'api_key': super().encryption(model.get('api_key', ''))}
+        return {
+            **model,
+            'api_base': DEEPSEEK_API_BASE,
+            'api_key': super().encryption(model.get('api_key', '')),
+        }
 
     api_base = forms.TextInputField(_('API URL'), required=True,
-                                    default_value='https://api.deepseek.com')
+                                    default_value=DEEPSEEK_API_BASE,
+                                    attrs={'disabled': True})
     api_key = forms.PasswordInputField('API Key', required=True)
 
     def get_model_params_setting_form(self, model_name):

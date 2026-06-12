@@ -16,6 +16,7 @@ from common.exception.app_exception import AppApiException
 from common.forms import BaseForm, TooltipLabel
 from models_provider.base_model_provider import BaseModelCredential, ValidCode
 from common.utils.logger import maxkb_logger
+from models_provider.impl.xf_model_provider.model.llm import XUNFEI_DEFAULT_LLM_API_URL
 
 class XunFeiLLMModelGeneralParams(BaseForm):
     temperature = forms.SliderField(TooltipLabel(_('Temperature'),
@@ -64,7 +65,8 @@ class XunFeiLLMModelCredential(BaseForm, BaseModelCredential):
             raise AppApiException(ValidCode.valid_error.value,
                                   gettext('{model_type} Model type is not supported').format(model_type=model_type))
 
-        for key in ['spark_api_url', 'spark_app_id', 'spark_api_key', 'spark_api_secret']:
+        model_credential = {**model_credential, 'spark_api_url': XUNFEI_DEFAULT_LLM_API_URL}
+        for key in ['spark_app_id', 'spark_api_key', 'spark_api_secret']:
             if key not in model_credential:
                 if raise_exception:
                     raise AppApiException(ValidCode.valid_error.value, gettext('{key}  is required').format(key=key))
@@ -87,9 +89,18 @@ class XunFeiLLMModelCredential(BaseForm, BaseModelCredential):
         return True
 
     def encryption_dict(self, model: Dict[str, object]):
-        return {**model, 'spark_api_secret': super().encryption(model.get('spark_api_secret', ''))}
+        return {
+            **model,
+            'spark_api_url': XUNFEI_DEFAULT_LLM_API_URL,
+            'spark_api_secret': super().encryption(model.get('spark_api_secret', '')),
+        }
 
-    spark_api_url = forms.TextInputField('API URL', required=True)
+    spark_api_url = forms.TextInputField(
+        'API URL',
+        required=True,
+        default_value=XUNFEI_DEFAULT_LLM_API_URL,
+        attrs={'disabled': True}
+    )
     spark_app_id = forms.TextInputField('APP ID', required=True)
     spark_api_key = forms.PasswordInputField("API Key", required=True)
     spark_api_secret = forms.PasswordInputField('API Secret', required=True)

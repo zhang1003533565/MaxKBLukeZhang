@@ -15,6 +15,8 @@ from langchain_core.messages import AIMessage
 from models_provider.base_model_provider import MaxKBBaseModel
 from models_provider.impl.base_chat_open_ai import BaseChatOpenAI
 
+DEEPSEEK_API_BASE = 'https://api.deepseek.com'
+
 
 class DeepSeekChatModel(MaxKBBaseModel, BaseChatOpenAI):
 
@@ -28,7 +30,7 @@ class DeepSeekChatModel(MaxKBBaseModel, BaseChatOpenAI):
 
         deepseek_chat_open_ai = DeepSeekChatModel(
             model=model_name,
-            openai_api_base=model_credential.get('api_base') or 'https://api.deepseek.com',
+            openai_api_base=DEEPSEEK_API_BASE,
             openai_api_key=model_credential.get('api_key'),
             **optional_params,
         )

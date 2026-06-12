@@ -15,6 +15,7 @@ from common.exception.app_exception import AppApiException
 from common.forms import BaseForm
 from models_provider.base_model_provider import BaseModelCredential, ValidCode
 from common.utils.logger import maxkb_logger
+from models_provider.impl.xf_model_provider.model.embedding import XUNFEI_EMBEDDING_API_BASE
 
 class XFEmbeddingCredential(BaseForm, BaseModelCredential):
 
@@ -24,6 +25,7 @@ class XFEmbeddingCredential(BaseForm, BaseModelCredential):
         if not any(list(filter(lambda mt: mt.get('value') == model_type, model_type_list))):
             raise AppApiException(ValidCode.valid_error.value,
                                   _('{model_type} Model type is not supported').format(model_type=model_type))
+        model_credential = {**model_credential, 'base_url': XUNFEI_EMBEDDING_API_BASE}
         self.valid_form(model_credential)
         try:
             model = provider.get_model(model_type, model_name, model_credential)
@@ -41,9 +43,18 @@ class XFEmbeddingCredential(BaseForm, BaseModelCredential):
         return True
 
     def encryption_dict(self, model: Dict[str, object]):
-        return {**model, 'spark_api_secret': super().encryption(model.get('spark_api_secret', ''))}
+        return {
+            **model,
+            'base_url': XUNFEI_EMBEDDING_API_BASE,
+            'spark_api_secret': super().encryption(model.get('spark_api_secret', '')),
+        }
 
-    base_url = forms.TextInputField('API URL', required=True, default_value="https://emb-cn-huabei-1.xf-yun.com/")
+    base_url = forms.TextInputField(
+        'API URL',
+        required=True,
+        default_value=XUNFEI_EMBEDDING_API_BASE,
+        attrs={'disabled': True}
+    )
     spark_app_id = forms.TextInputField('APP ID', required=True)
     spark_api_key = forms.PasswordInputField("API Key", required=True)
     spark_api_secret = forms.PasswordInputField('API Secret', required=True)

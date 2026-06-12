@@ -9,19 +9,19 @@
 
 import base64
 import json
+import queue
+import threading
+import time
 from typing import Dict, Optional
+
 from langchain_community.embeddings import SparkLLMTextEmbeddings
 from numpy import ndarray
+import numpy as np
 
 from models_provider.base_model_provider import MaxKBBaseModel
-import time
-import json
-import base64
-import numpy as np
-import threading
-import queue
 
 _task_queue = queue.Queue()
+XUNFEI_EMBEDDING_API_BASE = "https://emb-cn-huabei-1.xf-yun.com/"
 
 
 def _worker():
@@ -71,7 +71,7 @@ class XFEmbedding(MaxKBBaseModel, SparkLLMTextEmbeddings):
     @staticmethod
     def new_instance(model_type, model_name, model_credential: Dict[str, object], **model_kwargs):
         return XFEmbedding(
-            base_url=model_credential.get('base_url'),
+            base_url=XUNFEI_EMBEDDING_API_BASE,
             spark_app_id=model_credential.get('spark_app_id'),
             spark_api_key=model_credential.get('spark_api_key'),
             spark_api_secret=model_credential.get('spark_api_secret')
