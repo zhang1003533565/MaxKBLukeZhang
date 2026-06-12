@@ -19,12 +19,6 @@
                   >{{ $t('views.document.uploadDocument') }}
                 </el-button>
                 <el-button
-                  v-if="knowledgeDetail?.type === 1 && permissionPrecise.doc_create(id)"
-                  type="primary"
-                  @click="importDoc"
-                  >{{ $t('views.document.importDocument') }}
-                </el-button>
-                <el-button
                   v-if="knowledgeDetail?.type === 2 && permissionPrecise.doc_create(id)"
                   type="primary"
                   @click="
@@ -36,12 +30,6 @@
                       },
                     })
                   "
-                  >{{ $t('views.document.importDocument') }}
-                </el-button>
-                <el-button
-                  v-if="knowledgeDetail?.type === 4 && permissionPrecise.doc_create(id)"
-                  type="primary"
-                  @click="toImportWorkflow"
                   >{{ $t('views.document.importDocument') }}
                 </el-button>
                 <el-button
@@ -88,13 +76,6 @@
                         :disabled="multipleSelection.length === 0"
                         v-if="permissionPrecise.doc_tag(id)"
                         >{{ $t('views.document.tag.addTag') }}
-                      </el-dropdown-item>
-                      <el-dropdown-item
-                        divided
-                        @click="syncMulDocument"
-                        :disabled="multipleSelection.length === 0"
-                        v-if="knowledgeDetail?.type === 1 && permissionPrecise.doc_sync(id)"
-                        >{{ $t('views.document.syncDocument') }}
                       </el-dropdown-item>
                       <el-dropdown-item
                         divided
@@ -168,16 +149,6 @@
                 </el-select>
               </div>
 
-              <el-tooltip
-                effect="dark"
-                :content="$t('common.ExecutionRecord.title')"
-                placement="top"
-                v-if="knowledgeDetail?.type === 4 && permissionPrecise.doc_create(id)"
-              >
-                <el-button @click="openListAction" class="ml-12">
-                  <AppIcon iconName="app-execution-record" class="color-secondary"></AppIcon>
-                </el-button>
-              </el-tooltip>
               <el-button @click="openTagDrawer" class="ml-12" v-if="permissionPrecise.tag_read(id)">
                 {{ $t('views.document.tag.label') }}
               </el-button>
@@ -536,7 +507,7 @@
                   />
                 </span>
                 <el-divider direction="vertical" />
-                <template v-if="knowledgeDetail?.type === 0 || knowledgeDetail?.type === 4">
+                <template v-if="knowledgeDetail?.type === 0">
                   <el-tooltip
                     effect="dark"
                     :content="$t('views.document.setting.cancelVectorization')"
@@ -704,7 +675,7 @@
                     </el-dropdown>
                   </span>
                 </template>
-                <template v-if="knowledgeDetail?.type === 1 || knowledgeDetail?.type === 2">
+                <template v-if="knowledgeDetail?.type === 2">
                   <el-tooltip
                     effect="dark"
                     :content="$t('views.document.setting.cancelVectorization')"
@@ -909,8 +880,6 @@
       "
     />
     <AddTagDialog ref="addTagDialogRef" @addTags="addTags" :apiType="apiType" />
-    <!-- 执行详情 -->
-    <ExecutionRecord ref="ListActionRef"></ExecutionRecord>
   </div>
 </template>
 <script setup lang="ts">
@@ -934,7 +903,6 @@ import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
 import TagDrawer from './tag/TagDrawer.vue'
 import TagSettingDrawer from './tag/TagSettingDrawer.vue'
 import AddTagDialog from '@/views/document/tag/MulAddTagDialog.vue'
-import ExecutionRecord from '@/views/knowledge-workflow/component/execution-record/ExecutionRecordDrawer.vue'
 import UserApi from '@/api/user/user.ts'
 
 const route = useRoute()
@@ -985,7 +953,6 @@ const permissionPrecise = computed(() => {
 const MoreFilledPermission0 = (id: string) => {
   return (
     permissionPrecise.value.doc_migrate(id) ||
-    (knowledgeDetail?.value.type === 1 && permissionPrecise.value.doc_sync(id)) ||
     (knowledgeDetail?.value.type === 2 && permissionPrecise.value.doc_sync(id)) ||
     permissionPrecise.value.doc_delete(id) ||
     permissionPrecise.value.doc_tag(id)
@@ -1028,7 +995,6 @@ const search_form = ref<any>({
 const beforePagination = computed(() => common.paginationConfig[storeKey])
 const beforeSearch = computed(() => common.search[storeKey])
 const embeddingContentDialogRef = ref<InstanceType<typeof EmbeddingContentDialog>>()
-const ListActionRef = ref<InstanceType<typeof ExecutionRecord>>()
 const loading = ref(false)
 let interval: any
 
@@ -1050,29 +1016,6 @@ const multipleSelection = ref<any[]>([])
 const title = ref('')
 
 const selectKnowledgeDialogRef = ref()
-
-const openListAction = () => {
-  ListActionRef.value?.open(id)
-}
-
-const toImportWorkflow = () => {
-  if (knowledgeDetail.value.is_publish) {
-    router.push({
-      path: `/knowledge/import/workflow/${folderId}`,
-      query: {
-        id: id,
-      },
-    })
-  } else {
-    MsgConfirm(t('common.tip'), t('views.document.tip.toImportDocConfirm'), {
-      cancelButtonText: t('common.close'),
-      showConfirmButton: false,
-      type: 'warning',
-    })
-      .then(() => {})
-      .catch(() => {})
-  }
-}
 
 const exportDocument = (document: any) => {
   loadSharedApi({ type: 'document', systemType: apiType.value })
@@ -1152,11 +1095,6 @@ const cancelTask = (row: any, task_type: number) => {
     })
 }
 
-function importDoc() {
-  title.value = t('views.document.importDocument')
-  ImportDocumentDialogRef.value.open()
-}
-
 function settingDoc(row: any) {
   title.value = t('common.setting')
   ImportDocumentDialogRef.value.open(row)
@@ -1191,11 +1129,7 @@ const closeInterval = () => {
 }
 
 function syncDocument(row: any) {
-  if (+row.type === 1) {
-    syncWebDocument(row)
-  } else {
-    syncLarkDocument(row)
-  }
+  syncLarkDocument(row)
 }
 
 function syncLarkDocument(row: any) {
@@ -1211,30 +1145,6 @@ function syncLarkDocument(row: any) {
         })
     })
     .catch(() => {})
-}
-
-function syncWebDocument(row: any) {
-  if (row.meta?.source_url) {
-    MsgConfirm(t('views.document.sync.confirmTitle'), t('views.document.sync.confirmMessage1'), {
-      confirmButtonText: t('views.document.sync.label'),
-      confirmButtonClass: 'danger',
-    })
-      .then(() => {
-        loadSharedApi({ type: 'document', systemType: apiType.value })
-          .putDocumentSync(row.knowledge_id, row.id)
-          .then(() => {
-            getList()
-          })
-      })
-      .catch(() => {})
-  } else {
-    MsgConfirm(t('common.tip'), t('views.document.sync.confirmMessage2'), {
-      confirmButtonText: t('common.confirm'),
-      type: 'warning',
-    })
-      .then(() => {})
-      .catch(() => {})
-  }
 }
 
 function refreshDocument(row: any) {
@@ -1283,28 +1193,6 @@ function creatQuickHandle(val: string) {
     .catch(() => {
       loading.value = false
     })
-}
-
-function syncMulDocument() {
-  const arr: string[] = []
-  multipleSelection.value.map((v) => {
-    if (v) {
-      arr.push(v.id)
-    }
-  })
-  MsgConfirm(t('views.document.sync.confirmTitle'), t('views.document.sync.confirmMessage1'), {
-    confirmButtonText: t('views.document.sync.label'),
-    confirmButtonClass: 'danger',
-  })
-    .then(() => {
-      loadSharedApi({ type: 'document', systemType: apiType.value })
-        .putMulSyncDocument(id, arr, loading)
-        .then(() => {
-          MsgSuccess(t('views.document.sync.successMessage'))
-          getList()
-        })
-    })
-    .catch(() => {})
 }
 
 function syncLarkMulDocument() {

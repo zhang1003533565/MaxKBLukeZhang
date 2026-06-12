@@ -339,10 +339,7 @@ class BaseChatNode(IChatNode):
             application_id = None
             tool_id = None
             knowledge_id = None
-            if [WorkflowMode.KNOWLEDGE, WorkflowMode.KNOWLEDGE_LOOP].__contains__(
-                    self.workflow_manage.flow.workflow_mode):
-                knowledge_id = self.workflow_params.get('knowledge_id')
-            elif [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP].__contains__(
+            if [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP].__contains__(
                     self.workflow_manage.flow.workflow_mode):
                 application_id = self.workflow_manage.work_flow_post_handler.chat_info.application.id
             elif [WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP].__contains__(self.workflow_manage.flow.workflow_mode):
@@ -365,11 +362,11 @@ class BaseChatNode(IChatNode):
     def handle_variables(self, tool_params):
         # 处理参数中的变量
         for k, v in tool_params.items():
-            if type(v) == str:
+            if isinstance(v, str):
                 tool_params[k] = self.workflow_manage.generate_prompt(tool_params[k])
-            elif type(v) == dict:
+            elif isinstance(v, dict):
                 self.handle_variables(v)
-            elif (type(v) == list) and len(v) > 0 and (type(v[0]) == str):
+            elif isinstance(v, list) and len(v) > 0 and isinstance(v[0], str):
                 tool_params[k] = self.get_reference_content(v)
         return tool_params
 

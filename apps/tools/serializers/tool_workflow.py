@@ -12,11 +12,9 @@ import json
 import os
 
 # coding=utf-8
-import pickle
 import tempfile
 import zipfile
-from functools import reduce
-from typing import Dict, List
+from typing import Dict
 
 import requests
 import uuid_utils.compat as uuid
@@ -29,28 +27,23 @@ from application.serializers.common import ToolExecute
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.exception.app_exception import AppApiException
 from common.field.common import UploadedFileField
-from common.result import result
-from common.utils.common import bytes_to_uploaded_file, generate_uuid, restricted_loads
+from common.utils.common import bytes_to_uploaded_file
 from common.utils.logger import maxkb_logger
 from common.utils.tool_code import ToolExecutor
-from django.db import transaction
 from django.db.models import Q, QuerySet
-from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
-from knowledge.models import Knowledge, KnowledgeScope, KnowledgeWorkflow
+from knowledge.models import Knowledge, KnowledgeScope
 from knowledge.serializers.knowledge import KnowledgeModelSerializer, KnowledgeSerializer
 from maxkb.const import CONFIG
-from rest_framework import serializers, status
+from rest_framework import serializers
 from rest_framework.utils.formatting import lazy_format
-from system_manage.models import AuthTargetType
 from system_manage.models.resource_mapping import ResourceMapping
-from system_manage.serializers.user_resource_permission import UserResourcePermissionSerializer
 from users.models import User
 
-from tools.models import Tool, ToolScope, ToolWorkflow, ToolWorkflowVersion
-from tools.serializers.tool import ToolExportModelSerializer, ToolSerializer
+from tools.models import Tool, ToolWorkflow, ToolWorkflowVersion
+from tools.serializers.tool import ToolSerializer
 
 tool_executor = ToolExecutor()
 
@@ -127,16 +120,6 @@ class ToolWorkflowImportRequest(serializers.Serializer):
 class ToolWorkflowActionListQuerySerializer(serializers.Serializer):
     user_name = serializers.CharField(required=False, label=_("Name"), allow_blank=True, allow_null=True)
     state = serializers.CharField(required=False, label=_("State"), allow_blank=True, allow_null=True)
-
-
-class ToolWorkflowInstance:
-    def __init__(self, knowledge_workflow: dict, version: str, tool_list: List[dict]):
-        self.knowledge_workflow = knowledge_workflow
-        self.version = version
-        self.tool_list = tool_list
-
-    def get_tool_list(self):
-        return self.tool_list or []
 
 
 class ToolWorkflowSerializer(serializers.Serializer):

@@ -11,7 +11,6 @@ const workspaceShare = {
   generate: () => false,
   edit: () => false,
   export: () => false,
-  publish: () => false,
   delete: () => false,
   auth: () => false,
   relate_map: () => false,
@@ -57,9 +56,6 @@ const workspaceShare = {
   folderAuth: () => false,
   folderDelete: () => false,
   hit_test: () => false,
-  debug: () => false,
-  workflow_edit: () => false,
-  workflow_export: () => false,
 }
 
 export default workspaceShare

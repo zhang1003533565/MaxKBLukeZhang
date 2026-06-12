@@ -1,10 +1,7 @@
 import io
 import json
 import os
-import pickle
 import re
-import tempfile
-import traceback
 import zipfile
 from collections import defaultdict
 from functools import reduce
@@ -12,7 +9,6 @@ from tempfile import TemporaryDirectory
 from typing import Dict, List
 from urllib.parse import quote
 
-import requests
 import uuid_utils.compat as uuid
 from celery_once import AlreadyQueued
 from common.chunk import text_to_chunk
@@ -24,11 +20,7 @@ from common.event.listener_manage import ListenerManagement
 from common.exception.app_exception import AppApiException
 from common.field.common import UploadedFileField
 from common.utils.common import bulk_create_in_batches, get_file_content, parse_image, post
-from common.utils.fork import ChildLink, Fork
-from common.utils.logger import maxkb_logger
-from common.utils.split_model import get_split_model
 from django.core import validators
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import models, transaction
 from django.db.models import QuerySet
 from django.db.models.functions import Reverse, Substr
@@ -37,7 +29,6 @@ from django.http import HttpResponse
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from maxkb.conf import PROJECT_DIR
-from maxkb.const import CONFIG
 from models_provider.models import Model
 from rest_framework import serializers
 from system_manage.models import AuthTargetType, WorkspaceUserResourcePermission
@@ -55,7 +46,6 @@ from knowledge.models import (
     KnowledgeFolder,
     KnowledgeScope,
     KnowledgeType,
-    KnowledgeWorkflow,
     Paragraph,
     Problem,
     ProblemParagraphMapping,
@@ -83,7 +73,6 @@ from knowledge.serializers.common import (
 from knowledge.serializers.document import DocumentSerializers
 from knowledge.task.embedding import delete_embedding_by_knowledge, embedding_by_knowledge
 from knowledge.task.generate import generate_related_by_knowledge_id
-from knowledge.task.sync import sync_replace_web_knowledge, sync_web_knowledge
 
 
 class KnowledgeModelSerializer(serializers.ModelSerializer):
@@ -116,15 +105,6 @@ class KnowledgeImportRequest(serializers.Serializer):
     file = UploadedFileField(required=True, label=_("file"))
 
 
-class KnowledgeWebCreateRequest(serializers.Serializer):
-    name = serializers.CharField(required=True, label=_("knowledge name"))
-    folder_id = serializers.CharField(required=True, label=_("folder id"))
-    desc = serializers.CharField(required=False, allow_null=True, allow_blank=True, label=_("knowledge description"))
-    embedding_model_id = serializers.CharField(required=True, label=_("knowledge embedding"))
-    source_url = serializers.CharField(required=True, label=_("source url"))
-    selector = serializers.CharField(required=False, label=_("knowledge selector"), allow_null=True, allow_blank=True)
-
-
 class KnowledgeEditRequest(serializers.Serializer):
     name = serializers.CharField(required=False, max_length=64, min_length=1, label=_("knowledge name"))
     desc = serializers.CharField(required=False, max_length=256, min_length=1, label=_("knowledge description"))
@@ -141,7 +121,6 @@ class KnowledgeEditRequest(serializers.Serializer):
     def get_knowledge_meta_valid_map():
         knowledge_meta_valid_map = {
             KnowledgeType.BASE: MetaSerializer.BaseMeta,
-            KnowledgeType.WEB: MetaSerializer.WebMeta,
         }
         return knowledge_meta_valid_map
 
@@ -354,7 +333,7 @@ class KnowledgeSerializer(serializers.Serializer):
             embedding_model_id = get_embedding_model_id_by_knowledge_id(self.data.get("knowledge_id"))
             try:
                 embedding_by_knowledge.delay(knowledge_id, embedding_model_id)
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("Failed to send the vectorization task, please try again later!"))
 
         def generate_related(self, instance: Dict, with_valid=True):
@@ -383,7 +362,7 @@ class KnowledgeSerializer(serializers.Serializer):
             ListenerManagement.get_aggregation_document_status_by_knowledge_id(knowledge_id)()
             try:
                 generate_related_by_knowledge_id.delay(knowledge_id, model_id, model_params_setting, prompt, state_list)
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("Failed to send the vectorization task, please try again later!"))
 
         def list_application(self, with_valid=True):
@@ -442,19 +421,8 @@ class KnowledgeSerializer(serializers.Serializer):
                 ),
                 with_search_one=True,
             )
-            workflow = {}
-
-            if knowledge_dict.get("type") == 4:
-                from knowledge.models import KnowledgeWorkflow
-
-                k = QuerySet(KnowledgeWorkflow).filter(knowledge_id=knowledge_dict.get("id")).first()
-                if k:
-                    workflow["work_flow"] = k.work_flow
-                    workflow["is_publish"] = k.is_publish
-                    workflow["publish_time"] = k.publish_time
             return {
                 **knowledge_dict,
-                **workflow,
                 "meta": json.loads(knowledge_dict.get("meta", "{}")),
                 "application_id_list": list(
                     filter(
@@ -700,39 +668,6 @@ class KnowledgeSerializer(serializers.Serializer):
                 with open(os.path.join(tempdir, "knowledge.json"), "w", encoding="utf-8") as f:
                     json.dump(knowledge_json, f, ensure_ascii=False)
 
-                if knowledge.type == KnowledgeType.WORKFLOW:
-                    knowledge_workflow = QuerySet(KnowledgeWorkflow).filter(knowledge_id=knowledge_id).first()
-                    if knowledge_workflow:
-                        from application.flow.tools import get_tool_id_list
-                        from tools.models import Tool, ToolScope, ToolType, ToolWorkflow
-
-                        from knowledge.serializers.knowledge_workflow import (
-                            KBWFInstance,
-                            KnowledgeWorkflowModelSerializer,
-                            KnowledgeWorkflowSerializer,
-                        )
-
-                        tool_id_list = get_tool_id_list(knowledge_workflow.work_flow, True)
-                        tool_list = []
-                        if len(tool_id_list) > 0:
-                            tool_list = QuerySet(Tool).filter(id__in=tool_id_list).exclude(scope=ToolScope.SHARED)
-                        tw_dict = {
-                            tw.tool_id: tw
-                            for tw in QuerySet(ToolWorkflow).filter(
-                                tool_id__in=[tool.id for tool in tool_list if tool.tool_type == ToolType.WORKFLOW]
-                            )
-                        }
-                        knowledge_workflow_dict = KnowledgeWorkflowModelSerializer(knowledge_workflow).data
-
-                        kbwf_instance = KBWFInstance(
-                            knowledge_workflow_dict,
-                            [],
-                            "v2",
-                            [KnowledgeWorkflowSerializer.Export.to_tool_dict(tool, tw_dict) for tool in tool_list],
-                        )
-                        knowledge_workflow_pickle = pickle.dumps(kbwf_instance)
-                        with open(os.path.join(tempdir, "workflow.kbwf"), "wb") as f:
-                            f.write(knowledge_workflow_pickle)
                 zip_dir(tempdir, zip_buffer)
             response.write(zip_buffer.getvalue())
             return response
@@ -1104,16 +1039,6 @@ class KnowledgeSerializer(serializers.Serializer):
                 ]
                 QuerySet(Termbase).bulk_create(termbase_instance_list) if len(termbase_instance_list) > 0 else None
 
-                # 工作流导入
-            if "workflow.kbwf" in namelist:
-                workflow_bytes = zf.read("workflow.kbwf")
-                from knowledge.serializers.knowledge_workflow import KnowledgeWorkflowSerializer
-
-                workflow_file = SimpleUploadedFile("workflow.kbwf", workflow_bytes)
-                KnowledgeWorkflowSerializer.Import(
-                    data={"knowledge_id": str(knowledge_id), "user_id": user_id, "workspace_id": workspace_id}
-                ).import_({"file": workflow_file}, is_import_tool)
-
             # 授权 + 资源映射
             UserResourcePermissionSerializer(
                 data={
@@ -1209,150 +1134,6 @@ class KnowledgeSerializer(serializers.Serializer):
                 "char_length": reduce(lambda x, y: x + y, [d.char_length for d in document_model_list], 0),
             }, knowledge_id
 
-        def save_web(self, instance: Dict, with_valid=True):
-            if with_valid:
-                self.is_valid(raise_exception=True)
-                KnowledgeWebCreateRequest(data=instance).is_valid(raise_exception=True)
-
-            folder_id = instance.get("folder_id", self.data.get("workspace_id"))
-
-            knowledge_id = uuid.uuid7()
-            knowledge = Knowledge(
-                id=knowledge_id,
-                name=instance.get("name"),
-                desc=instance.get("desc"),
-                user_id=self.data.get("user_id"),
-                type=instance.get("type", KnowledgeType.WEB),
-                scope=self.data.get("scope", KnowledgeScope.WORKSPACE),
-                folder_id=folder_id,
-                workspace_id=self.data.get("workspace_id"),
-                embedding_model_id=instance.get("embedding_model_id"),
-                meta={
-                    "source_url": instance.get("source_url"),
-                    "selector": instance.get("selector", "body"),
-                    "embedding_model_id": instance.get("embedding_model_id"),
-                },
-            )
-            knowledge.save()
-            # 自动资源给授权当前用户
-            UserResourcePermissionSerializer(
-                data={
-                    "workspace_id": self.data.get("workspace_id"),
-                    "user_id": self.data.get("user_id"),
-                    "auth_target_type": AuthTargetType.KNOWLEDGE.value,
-                }
-            ).auth_resource(str(knowledge_id))
-
-            sync_web_knowledge.delay(
-                str(knowledge_id), self.data.get("user_id"), instance.get("source_url"), instance.get("selector")
-            )
-            update_resource_mapping_by_knowledge(str(knowledge_id))
-            return {**KnowledgeModelSerializer(knowledge).data, "document_list": []}
-
-    class SyncWeb(serializers.Serializer):
-        workspace_id = serializers.CharField(required=True, label=_("workspace id"))
-        knowledge_id = serializers.CharField(required=True, label=_("knowledge id"))
-        user_id = serializers.UUIDField(required=False, label=_("user id"), allow_null=True)
-        sync_type = serializers.CharField(
-            required=True,
-            label=_("sync type"),
-            validators=[
-                validators.RegexValidator(
-                    regex=re.compile("^replace|complete$"),
-                    message=_("The synchronization type only supports:replace|complete"),
-                    code=500,
-                )
-            ],
-        )
-
-        def is_valid(self, *, raise_exception=False):
-            super().is_valid(raise_exception=True)
-            workspace_id = self.data.get("workspace_id")
-            query_set = QuerySet(Knowledge).filter(id=self.data.get("knowledge_id"))
-            if workspace_id:
-                query_set = query_set.filter(workspace_id=workspace_id)
-            if not query_set.exists():
-                raise AppApiException(500, _("Knowledge id does not exist"))
-            first = QuerySet(Knowledge).filter(id=self.data.get("knowledge_id")).first()
-            if first is None:
-                raise AppApiException(300, _("id does not exist"))
-            if first.type != KnowledgeType.WEB:
-                raise AppApiException(500, _("Synchronization is only supported for web site types"))
-
-        def sync(self, with_valid=True):
-            if with_valid:
-                self.is_valid(raise_exception=True)
-            sync_type = self.data.get("sync_type")
-            knowledge_id = self.data.get("knowledge_id")
-            knowledge = QuerySet(Knowledge).get(id=knowledge_id)
-            self.__getattribute__(sync_type + "_sync")(knowledge)
-            return True
-
-        @staticmethod
-        def get_sync_handler(knowledge):
-            def handler(child_link: ChildLink, response: Fork.Response):
-                if response.status == 200:
-                    try:
-                        document_name = (
-                            child_link.tag.text
-                            if child_link.tag is not None and len(child_link.tag.text.strip()) > 0
-                            else child_link.url
-                        )
-                        paragraphs = get_split_model("web.md").parse(response.content)
-                        maxkb_logger.info(child_link.url.strip())
-                        first = (
-                            QuerySet(Document)
-                            .filter(meta__source_url=child_link.url.strip(), knowledge=knowledge)
-                            .first()
-                        )
-                        if first is not None:
-                            # 如果存在,使用文档同步
-                            DocumentSerializers.Sync(data={"document_id": first.id}).sync()
-                        else:
-                            # 插入
-                            DocumentSerializers.Create(data={"knowledge_id": knowledge.id}).save(
-                                {
-                                    "name": document_name,
-                                    "paragraphs": paragraphs,
-                                    "meta": {
-                                        "source_url": child_link.url.strip(),
-                                        "selector": knowledge.meta.get("selector"),
-                                    },
-                                    "type": KnowledgeType.WEB,
-                                },
-                                with_valid=True,
-                            )
-                    except Exception as e:
-                        maxkb_logger.error(f"{str(e)}:{traceback.format_exc()}")
-
-            return handler
-
-        def replace_sync(self, knowledge):
-            """
-            替换同步
-            :return:
-            """
-            url = knowledge.meta.get("source_url")
-            selector = knowledge.meta.get("selector") if "selector" in knowledge.meta else None
-            user_id = self.data.get("user_id")
-            sync_replace_web_knowledge.delay(str(knowledge.id), user_id, url, selector)
-
-        def complete_sync(self, knowledge):
-            """
-            完整同步  删掉当前数据集下所有的文档,再进行同步
-            :return:
-            """
-            # 删除关联问题
-            QuerySet(ProblemParagraphMapping).filter(knowledge=knowledge).delete()
-            # 删除文档
-            QuerySet(Document).filter(knowledge=knowledge).delete()
-            # 删除段落
-            QuerySet(Paragraph).filter(knowledge=knowledge).delete()
-            # 删除向量
-            delete_embedding_by_knowledge(self.data.get("knowledge_id"))
-            # 同步
-            self.replace_sync(knowledge)
-
     class HitTest(serializers.Serializer):
         workspace_id = serializers.CharField(required=True, label=_("workspace id"))
         knowledge_id = serializers.UUIDField(required=True, label=_("id"))
@@ -1411,90 +1192,6 @@ class KnowledgeSerializer(serializers.Serializer):
                 }
                 for p in p_list
             ]
-
-    class StoreKnowledge(serializers.Serializer):
-        user_id = serializers.UUIDField(required=True, label=_("User ID"))
-        name = serializers.CharField(required=False, label=_("tool name"), allow_null=True, allow_blank=True)
-
-        def get_appstore_templates(self):
-            self.is_valid(raise_exception=True)
-            # 下载zip文件
-            try:
-                appstore_url = CONFIG.get("APPSTORE_URL", "https://apps-assets.fit2cloud.com/stable/maxkb.json.zip")
-                res = requests.get(appstore_url, timeout=5)
-                res.raise_for_status()
-                # 创建临时文件保存zip
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as temp_zip:
-                    temp_zip.write(res.content)
-                    temp_zip_path = temp_zip.name
-
-                try:
-                    # 解压zip文件
-                    with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-                        # 获取zip中的第一个文件（假设只有一个json文件）
-                        json_filename = zip_ref.namelist()[0]
-                        json_content = zip_ref.read(json_filename)
-
-                    # 将json转换为字典
-                    tool_store = json.loads(json_content.decode("utf-8"))
-                    tag_dict = {tag["name"]: tag["key"] for tag in tool_store["additionalProperties"]["tags"]}
-                    filter_apps = []
-                    for tool in tool_store["apps"]:
-                        if self.data.get("name", "") != "":
-                            if self.data.get("name").lower() not in tool.get("name", "").lower():
-                                continue
-                        if not tool["downloadUrl"].endswith(".kbwf"):
-                            continue
-                        versions = tool.get("versions", [])
-                        tool["label"] = tag_dict[tool.get("tags")[0]] if tool.get("tags") else ""
-                        tool["version"] = next(
-                            (
-                                version.get("name")
-                                for version in versions
-                                if version.get("downloadUrl") == tool["downloadUrl"]
-                            ),
-                        )
-                        filter_apps.append(tool)
-
-                    tool_store["apps"] = filter_apps
-                    return tool_store
-                finally:
-                    # 清理临时文件
-                    os.unlink(temp_zip_path)
-            except Exception as e:
-                maxkb_logger.error(f"fetch appstore tools error: {e}")
-                return {"apps": [], "additionalProperties": {"tags": []}}
-
-    class TransformWorkflow(serializers.Serializer):
-        workspace_id = serializers.CharField(required=True, label=_("Workspace ID"))
-        knowledge_id = serializers.UUIDField(required=True, label=_("Knowledge ID"))
-        user_id = serializers.UUIDField(required=True, label=_("User ID"))
-
-        def transform(self, instance: Dict):
-            self.is_valid(raise_exception=True)
-            knowledge = (
-                QuerySet(Knowledge)
-                .filter(id=self.data.get("knowledge_id"), workspace_id=self.data.get("workspace_id"))
-                .first()
-            )
-
-            if not knowledge:
-                raise AppApiException(500, _("Knowledge not found"))
-            if knowledge.type == KnowledgeType.WORKFLOW:
-                raise AppApiException(500, _("Knowledge is already a workflow"))
-
-            knowledge.type = KnowledgeType.WORKFLOW
-            knowledge.save()
-
-            workflow_id = uuid.uuid7()
-            knowledge_workflow = KnowledgeWorkflow(
-                id=workflow_id,
-                workspace_id=knowledge.workspace_id,
-                knowledge_id=knowledge.id,
-                work_flow=instance.get("work_flow", {}),
-            )
-            knowledge_workflow.save()
-            return True
 
     class Tags(serializers.Serializer):
         workspace_id = serializers.CharField(required=True, label=_("workspace id"))

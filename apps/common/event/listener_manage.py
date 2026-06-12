@@ -45,21 +45,6 @@ from common.utils.ts_vecto_util import to_ts_vector
 lock = threading.Lock()
 
 
-class SyncWebKnowledgeArgs:
-    def __init__(self, lock_key: str, url: str, selector: str, handler):
-        self.lock_key = lock_key
-        self.url = url
-        self.selector = selector
-        self.handler = handler
-
-
-class SyncWebDocumentArgs:
-    def __init__(self, source_url_list: List[str], selector: str, handler):
-        self.source_url_list = source_url_list
-        self.selector = selector
-        self.handler = handler
-
-
 class UpdateProblemArgs:
     def __init__(self, problem_id: str, problem_content: str, embedding_model: Embeddings):
         self.problem_id = problem_id

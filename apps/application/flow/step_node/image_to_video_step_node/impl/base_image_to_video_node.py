@@ -87,14 +87,11 @@ class BaseImageToVideoNode(IImageToVideoNode):
                 encoded_bytes = base64.b64encode(file_bytes)
                 return f'data:{content_type};base64,{encoded_bytes.decode()}'
             return image_url
-        except Exception as e:
+        except Exception:
             raise ValueError(
                 gettext("Failed to obtain the image"))
 
     def upload_file(self, file):
-        if [WorkflowMode.KNOWLEDGE, WorkflowMode.KNOWLEDGE_LOOP].__contains__(
-                self.workflow_manage.flow.workflow_mode):
-            return self.upload_knowledge_file(file)
         if [WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP].__contains__(self.workflow_manage.flow.workflow_mode):
             return self.upload_tool_file(file)
         return self.upload_application_file(file)

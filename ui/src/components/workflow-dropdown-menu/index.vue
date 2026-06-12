@@ -5,8 +5,6 @@
 import { inject } from 'vue'
 import { WorkflowMode } from '@/enums/application'
 import ApplicationDropdownMenu from '@/components/workflow-dropdown-menu/application/index.vue'
-import KnowledgeDropdownMenu from '@/components/workflow-dropdown-menu/knowledge/index.vue'
-import KnowledgeDropdownInnerMenu from '@/components/workflow-dropdown-menu/knowledge-inner/index.vue'
 import ToolDropdownMenu from '@/components/workflow-dropdown-menu/tool/index.vue'
 const workflow_mode: WorkflowMode = inject('workflowMode') || WorkflowMode.Application
 const props = defineProps({
@@ -27,8 +25,6 @@ const props = defineProps({
 const kw: any = {
   [WorkflowMode.Application]: ApplicationDropdownMenu,
   [WorkflowMode.ApplicationLoop]: ApplicationDropdownMenu,
-  [WorkflowMode.Knowledge]: props.inner ? KnowledgeDropdownInnerMenu : KnowledgeDropdownMenu,
-  [WorkflowMode.KnowledgeLoop]: props.inner ? KnowledgeDropdownInnerMenu : KnowledgeDropdownMenu,
   [WorkflowMode.Tool]: ToolDropdownMenu,
   [WorkflowMode.ToolLoop]: ToolDropdownMenu,
 }

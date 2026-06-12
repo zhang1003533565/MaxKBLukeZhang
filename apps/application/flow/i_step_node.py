@@ -22,7 +22,7 @@ from application.long_term_memory import extract_long_term_memory
 from application.models import ApplicationChatUserStats
 from application.models import ChatRecord, ChatUserType
 from common.field.common import InstanceField
-from knowledge.models.knowledge_action import KnowledgeAction, State
+from knowledge.models.knowledge_action import State
 from tools.models import ToolRecord
 
 chat_cache = cache
@@ -111,19 +111,6 @@ class WorkFlowPostHandler:
             ),
             countdown=1,
         )
-
-
-class KnowledgeWorkflowPostHandler(WorkFlowPostHandler):
-    def __init__(self, chat_info, knowledge_action_id):
-        super().__init__(chat_info)
-        self.knowledge_action_id = knowledge_action_id
-
-    def handler(self, workflow):
-        state = get_workflow_state(workflow)
-        QuerySet(KnowledgeAction).filter(id=self.knowledge_action_id).update(
-            state=state,
-            run_time=time.time() - workflow.context.get('start_time') if workflow.context.get(
-                'start_time') is not None else 0)
 
 
 def get_tool_workflow_state(workflow):
@@ -254,15 +241,6 @@ class FlowParamsSerializer(serializers.Serializer):
     re_chat = serializers.BooleanField(required=True, label="换个答案")
 
     debug = serializers.BooleanField(required=True, label="是否debug")
-
-
-class KnowledgeFlowParamsSerializer(serializers.Serializer):
-    knowledge_id = serializers.UUIDField(required=True, label="知识库id")
-    workspace_id = serializers.CharField(required=True, label="工作空间id")
-    knowledge_action_id = serializers.UUIDField(required=True, label="知识库任务执行器id")
-    data_source = serializers.DictField(required=True, label="数据源")
-    knowledge_base = serializers.DictField(required=False, label="知识库设置")
-    user_id = serializers.UUIDField(required=False, label="创建人")
 
 
 class ToolFlowParamsSerializer(serializers.Serializer):

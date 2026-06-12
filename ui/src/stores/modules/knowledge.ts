@@ -6,7 +6,6 @@ import knowledgeApi from '@/api/knowledge/knowledge'
 
 export interface knowledgeStateTypes {
   baseInfo: knowledgeData | null
-  webInfo: any
   documentsType: string
   documentsFiles: UploadUserFile[]
   knowledgeList: any[]
@@ -15,7 +14,6 @@ export interface knowledgeStateTypes {
 const useKnowledgeStore = defineStore('knowledge', {
   state: (): knowledgeStateTypes => ({
     baseInfo: null,
-    webInfo: null,
     documentsType: '',
     documentsFiles: [],
     knowledgeList: [],
@@ -23,9 +21,6 @@ const useKnowledgeStore = defineStore('knowledge', {
   actions: {
     saveBaseInfo(info: knowledgeData | null) {
       this.baseInfo = info
-    },
-    saveWebInfo(info: any) {
-      this.webInfo = info
     },
     saveDocumentsType(val: string) {
       this.documentsType = val

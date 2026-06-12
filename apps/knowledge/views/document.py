@@ -30,10 +30,8 @@ from knowledge.api.document import (
     DocumentTreeReadAPI,
     QaDocumentCreateAPI,
     RefreshAPI,
-    SyncWebAPI,
     TableDocumentCreateAPI,
     TemplateExportAPI,
-    WebDocumentCreateAPI,
 )
 from knowledge.api.tag import DocsTagDeleteAPI
 from knowledge.serializers.common import get_knowledge_operation_object
@@ -317,44 +315,6 @@ class DocumentView(APIView):
                 ).batch_edit_hit_handling(request.data)
             )
 
-    class SyncWeb(APIView):
-        authentication_classes = [TokenAuth]
-
-        @extend_schema(
-            methods=["PUT"],
-            description=_("Synchronize web site types"),
-            summary=_("Synchronize web site types"),
-            operation_id=_("Synchronize web site types"),  # type: ignore
-            parameters=SyncWebAPI.get_parameters(),
-            request=SyncWebAPI.get_request(),
-            responses=SyncWebAPI.get_response(),
-            tags=[_("Knowledge Base/Documentation")],  # type: ignore
-        )
-        @has_permissions(
-            PermissionConstants.KNOWLEDGE_DOCUMENT_SYNC.get_workspace_knowledge_permission(),
-            PermissionConstants.KNOWLEDGE_DOCUMENT_SYNC.get_workspace_permission_workspace_manage_role(),
-            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
-            ViewPermission(
-                [RoleConstants.USER.get_workspace_role()],
-                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
-                CompareConstants.AND,
-            ),
-        )
-        @log(
-            menu="document",
-            operate="Synchronize web site types",
-            get_operation_object=lambda r, keywords: get_knowledge_document_operation_object(
-                get_knowledge_operation_object(keywords.get("knowledge_id")),
-                get_document_operation_object(keywords.get("document_id")),
-            ),
-        )
-        def put(self, request: Request, workspace_id: str, knowledge_id: str, document_id: str):
-            return result.success(
-                DocumentSerializers.Sync(
-                    data={"document_id": document_id, "knowledge_id": knowledge_id, "workspace_id": workspace_id}
-                ).sync()
-            )
-
     class Refresh(APIView):
         authentication_classes = [TokenAuth]
 
@@ -543,46 +503,6 @@ class DocumentView(APIView):
                 DocumentSerializers.Batch(
                     data={"knowledge_id": knowledge_id, "workspace_id": workspace_id, "user_id": request.user.id}
                 ).batch_save(request.data)
-            )
-
-    class BatchSync(APIView):
-        authentication_classes = [TokenAuth]
-
-        @extend_schema(
-            methods=["PUT"],
-            description=_("Batch sync documents"),
-            summary=_("Batch sync documents"),
-            operation_id=_("Batch sync documents"),  # type: ignore
-            request=DocumentBatchAPI.get_request(),
-            parameters=DocumentBatchAPI.get_parameters(),
-            responses=DocumentBatchAPI.get_response(),
-            tags=[_("Knowledge Base/Documentation")],  # type: ignore
-        )
-        @has_permissions(
-            PermissionConstants.KNOWLEDGE_DOCUMENT_SYNC.get_workspace_knowledge_permission(),
-            PermissionConstants.KNOWLEDGE_DOCUMENT_SYNC.get_workspace_permission_workspace_manage_role(),
-            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_knowledge_permission(),
-            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_permission_workspace_manage_role(),
-            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
-            ViewPermission(
-                [RoleConstants.USER.get_workspace_role()],
-                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
-                CompareConstants.AND,
-            ),
-        )
-        @log(
-            menu="document",
-            operate="Batch sync documents",
-            get_operation_object=lambda r, keywords: get_knowledge_document_operation_object(
-                get_knowledge_operation_object(keywords.get("knowledge_id")),
-                get_document_operation_object_batch(r.data.get("id_list")),
-            ),
-        )
-        def put(self, request: Request, workspace_id: str, knowledge_id: str):
-            return result.success(
-                DocumentSerializers.Batch(
-                    data={"knowledge_id": knowledge_id, "workspace_id": workspace_id, "user_id": request.user.id}
-                ).batch_sync(request.data)
             )
 
     class BatchDelete(APIView):
@@ -1187,48 +1107,6 @@ class DocumentView(APIView):
                     }
                 ).migrate()
             )
-
-
-class WebDocumentView(APIView):
-    authentication_classes = [TokenAuth]
-
-    @extend_schema(
-        methods=["POST"],
-        description=_("Create Web site documents"),
-        summary=_("Create Web site documents"),
-        operation_id=_("Create Web site documents"),  # type: ignore
-        request=WebDocumentCreateAPI.get_request(),
-        parameters=WebDocumentCreateAPI.get_parameters(),
-        responses=WebDocumentCreateAPI.get_response(),
-        tags=[_("Knowledge Base/Documentation")],  # type: ignore
-    )
-    @has_permissions(
-        PermissionConstants.KNOWLEDGE_DOCUMENT_CREATE.get_workspace_knowledge_permission(),
-        PermissionConstants.KNOWLEDGE_DOCUMENT_CREATE.get_workspace_permission_workspace_manage_role(),
-        RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
-        ViewPermission(
-            [RoleConstants.USER.get_workspace_role()],
-            [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
-            CompareConstants.AND,
-        ),
-    )
-    @log(
-        menu="document",
-        operate="Create Web site documents",
-        get_operation_object=lambda r, keywords: get_knowledge_document_operation_object(
-            get_knowledge_operation_object(keywords.get("knowledge_id")),
-            {
-                "name": f"[{','.join([url for url in r.data.get('source_url_list', [])])}]",
-                "document_list": [{"name": url} for url in r.data.get("source_url_list", [])],
-            },
-        ),
-    )
-    def post(self, request: Request, workspace_id: str, knowledge_id: str):
-        return result.success(
-            DocumentSerializers.Create(
-                data={"knowledge_id": knowledge_id, "workspace_id": workspace_id, "user_id": request.user.id}
-            ).save_web(request.data, with_valid=True)
-        )
 
 
 class QaDocumentView(APIView):

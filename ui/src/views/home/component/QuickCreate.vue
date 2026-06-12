@@ -145,21 +145,6 @@
                 </div>
               </div>
             </el-dropdown-item>
-            <el-dropdown-item @click="openCreateKnowledgeDialog(CreateWebKnowledgeDialog)">
-              <div class="flex">
-                <el-avatar class="avatar-purple mt-4" shape="square" :size="32">
-                  <img src="@/assets/knowledge/icon_web.svg" style="width: 58%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">
-                    {{ $t('views.knowledge.knowledgeType.webKnowledge') }}
-                  </div>
-                  <el-text type="info" size="small" class="color-secondary"
-                    >{{ $t('views.knowledge.knowledgeType.webInfo') }}
-                  </el-text>
-                </div>
-              </div>
-            </el-dropdown-item>
             <el-dropdown-item
               @click="openCreateKnowledgeDialog(CreateLarkKnowledgeDialog)"
               v-if="user.isPE() || user.isEE()"
@@ -179,24 +164,6 @@
                   </div>
                   <el-text type="info" size="small" class="color-secondary"
                     >{{ $t('views.knowledge.knowledgeType.larkInfo') }}
-                  </el-text>
-                </div>
-              </div>
-            </el-dropdown-item>
-            <el-dropdown-item
-              v-if="!isKnowledgeOnly"
-              @click="openCreateKnowledgeDialog(CreateWorkflowKnowledgeDialog)"
-            >
-              <div class="flex">
-                <el-avatar class="avatar-purple mt-4" shape="square" :size="32">
-                  <img src="@/assets/workflow/logo_workflow.svg" style="width: 60%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">
-                    {{ $t('views.knowledge.knowledgeType.workflowKnowledge') }}
-                  </div>
-                  <el-text type="info" size="small" class="color-secondary"
-                    >{{ $t('views.knowledge.knowledgeType.workflowInfo') }}
                   </el-text>
                 </div>
               </div>
@@ -408,9 +375,7 @@ import { ref, shallowRef, nextTick, computed } from 'vue'
 import CreateApplicationDialog from '@/views/application/component/CreateApplicationDialog.vue'
 import ApplicationApi from '@/api/application/application'
 import CreateKnowledgeDialog from '@/views/knowledge/create-component/CreateKnowledgeDialog.vue'
-import CreateWebKnowledgeDialog from '@/views/knowledge/create-component/CreateWebKnowledgeDialog.vue'
 import CreateLarkKnowledgeDialog from '@/views/knowledge/create-component/CreateLarkKnowledgeDialog.vue'
-import CreateWorkflowKnowledgeDialog from '@/views/knowledge/create-component/CreateWorkflowKnowledgeDialog.vue'
 import knowledgeApi from '@/api/knowledge/knowledge'
 import ToolFormDrawer from '@/views/tool/ToolFormDrawer.vue'
 import WorkflowFormDialog from '@/views/tool/WorkflowFormDialog.vue'

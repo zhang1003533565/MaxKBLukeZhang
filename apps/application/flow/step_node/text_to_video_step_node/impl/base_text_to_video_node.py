@@ -69,9 +69,6 @@ class BaseTextToVideoNode(ITextToVideoNode):
                            'history_message': history_message, 'question': question}, {})
 
     def upload_file(self, file):
-        if [WorkflowMode.KNOWLEDGE, WorkflowMode.KNOWLEDGE_LOOP].__contains__(
-                self.workflow_manage.flow.workflow_mode):
-            return self.upload_knowledge_file(file)
         if [WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP].__contains__(self.workflow_manage.flow.workflow_mode):
             return self.upload_tool_file(file)
         return self.upload_application_file(file)

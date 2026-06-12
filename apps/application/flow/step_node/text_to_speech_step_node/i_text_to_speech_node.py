@@ -25,8 +25,7 @@ class TextToSpeechNodeSerializer(serializers.Serializer):
 
 class ITextToSpeechNode(INode):
     type = 'text-to-speech-node'
-    support = [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP, WorkflowMode.KNOWLEDGE,
-               WorkflowMode.KNOWLEDGE_LOOP, WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP]
+    support = [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP, WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP]
 
     def get_node_params_serializer_class(self) -> Type[serializers.Serializer]:
         return TextToSpeechNodeSerializer

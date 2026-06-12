@@ -6,7 +6,7 @@ from common.result import ResultSerializer, DefaultResultSerializer
 from knowledge.serializers.common import BatchSerializer, BatchMoveSerializer
 from knowledge.serializers.common import GenerateRelatedSerializer
 from knowledge.serializers.knowledge import KnowledgeBaseCreateRequest, KnowledgeModelSerializer, KnowledgeEditRequest, \
-    KnowledgeWebCreateRequest, HitTestSerializer, KnowledgeImportRequest
+    HitTestSerializer, KnowledgeImportRequest
 
 
 class KnowledgeCreateResponse(ResultSerializer):
@@ -55,28 +55,6 @@ class KnowledgeBaseCreateAPI(APIMixin):
     @staticmethod
     def get_request():
         return KnowledgeBaseCreateRequest
-
-    @staticmethod
-    def get_response():
-        return KnowledgeCreateResponse
-
-
-class KnowledgeWebCreateAPI(APIMixin):
-    @staticmethod
-    def get_parameters():
-        return [
-            OpenApiParameter(
-                name="workspace_id",
-                description="工作空间id",
-                type=OpenApiTypes.STR,
-                location='path',
-                required=True,
-            )
-        ]
-
-    @staticmethod
-    def get_request():
-        return KnowledgeWebCreateRequest
 
     @staticmethod
     def get_response():
@@ -203,55 +181,23 @@ class KnowledgePageAPI(KnowledgeReadAPI):
         ]
 
 
-class SyncWebAPI(APIMixin):
-    @staticmethod
-    def get_parameters():
-        return [
-            OpenApiParameter(
-                name="workspace_id",
-                description="工作空间id",
-                type=OpenApiTypes.STR,
-                location='path',
-                required=True,
-            ),
-            OpenApiParameter(
-                name="knowledge_id",
-                description="知识库id",
-                type=OpenApiTypes.STR,
-                location='path',
-                required=True,
-            ),
-            OpenApiParameter(
-                name="sync_type",
-                description="同步类型 (replace: 替换同步, complete: 完整同步)",
-                type=OpenApiTypes.STR,
-                location='query',
-                required=True,
-            ),
-        ]
-
-    @staticmethod
-    def get_response():
-        return DefaultResultSerializer
-
-
-class GenerateRelatedAPI(SyncWebAPI):
+class GenerateRelatedAPI(KnowledgeReadAPI):
     @staticmethod
     def get_request():
         return GenerateRelatedSerializer
 
 
-class HitTestAPI(SyncWebAPI):
+class HitTestAPI(KnowledgeReadAPI):
     @staticmethod
     def get_request():
         return HitTestSerializer
 
 
-class EmbeddingAPI(SyncWebAPI):
+class EmbeddingAPI(KnowledgeReadAPI):
     pass
 
 
-class GetModelAPI(SyncWebAPI):
+class GetModelAPI(APIMixin):
     @staticmethod
     def get_parameters():
         return [

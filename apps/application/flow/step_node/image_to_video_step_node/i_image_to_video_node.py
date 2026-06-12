@@ -38,8 +38,7 @@ class ImageToVideoNodeSerializer(serializers.Serializer):
 
 class IImageToVideoNode(INode):
     type = 'image-to-video-node'
-    support = [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP, WorkflowMode.KNOWLEDGE,
-               WorkflowMode.KNOWLEDGE_LOOP, WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP]
+    support = [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP, WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP]
 
     def get_node_params_serializer_class(self) -> Type[serializers.Serializer]:
         return ImageToVideoNodeSerializer
@@ -48,7 +47,7 @@ class IImageToVideoNode(INode):
         first_frame_url = self.workflow_manage.get_reference_field(
             self.node_params_serializer.data.get('first_frame_url')[0],
             self.node_params_serializer.data.get('first_frame_url')[1:])
-        if first_frame_url is []:
+        if first_frame_url == []:
             raise ValueError(
                 _("First frame url cannot be empty"))
         last_frame_url = None
@@ -59,7 +58,7 @@ class IImageToVideoNode(INode):
                 self.node_params_serializer.data.get('last_frame_url')[1:])
         node_params_data = {k: v for k, v in self.node_params_serializer.data.items()
                             if k not in ['first_frame_url', 'last_frame_url']}
-        if [WorkflowMode.KNOWLEDGE, WorkflowMode.KNOWLEDGE_LOOP, WorkflowMode.TOOL,
+        if [WorkflowMode.TOOL,
             WorkflowMode.TOOL_LOOP].__contains__(
                 self.workflow_manage.flow.workflow_mode):
             return self.execute(first_frame_url=first_frame_url, last_frame_url=last_frame_url, **node_params_data,

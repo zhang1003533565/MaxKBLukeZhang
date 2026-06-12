@@ -273,24 +273,6 @@ const putDocumentTokenize: (
 }
 
 /**
- * 同步web站点类型
- * @param 参数
- * knowledge_id, document_id,
- */
-const putDocumentSync: (
-  knowledge_id: string,
-  document_id: string,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id, document_id, loading) => {
-  return put(
-    `${prefix.value}/${knowledge_id}/document/${document_id}/sync`,
-    undefined,
-    undefined,
-    loading,
-  )
-}
-
-/**
  * 创建批量文档
  * @param 参数
  {
@@ -438,23 +420,6 @@ const putBatchTokenize: (
 
 
 /**
- * 批量同步文档
- * @param 参数 knowledge_id,
- */
-const putMulSyncDocument: (
-  knowledge_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<boolean>> = (knowledge_id, data, loading) => {
-  return put(
-    `${prefix.value}/${knowledge_id}/document/batch_sync`,
-    {id_list: data},
-    undefined,
-    loading,
-  )
-}
-
-/**
  * 批量迁移文档
  * @param 参数 knowledge_id,target_knowledge_id,
 
@@ -559,34 +524,7 @@ const exportTableTemplate: (fileName: string, type: string, loading?: Ref<boolea
 }
 
 /**
- * 创建Web站点文档
- * @param 参数
- * {
- "source_url_list": [
- "string"
- ],
- "selector": "string"
- }
- }
- */
-const postWebDocument: (
-  knowledge_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id, data, loading) => {
-  return post(`${prefix.value}/${knowledge_id}/document/web`, data, undefined, loading)
-}
-
-/**
  * 飞书导入获得相关文档
- * @param 参数
- * {
- "source_url_list": [
- "string"
- ],
- "selector": "string"
- }
- }
  */
 const getLarkDocumentList: (
   knowledge_id: string,
@@ -701,14 +639,12 @@ export default {
   exportMulDocumentZip,
   putDocumentRefresh,
   putDocumentTokenize,
-  putDocumentSync,
   putMulDocument,
   delMulDocument,
   putBatchGenerateRelated,
   putBatchEditHitHandling,
   putBatchRefresh,
   putBatchTokenize,
-  putMulSyncDocument,
   putMigrateMulDocument,
   postQADocument,
   postSplitDocument,
@@ -716,7 +652,6 @@ export default {
   postTableDocument,
   exportQATemplate,
   exportTableTemplate,
-  postWebDocument,
   getLarkDocumentList,
   putLarkDocumentSync,
   putMulLarkSyncDocument,

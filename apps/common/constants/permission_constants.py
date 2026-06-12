@@ -39,12 +39,9 @@ class Group(Enum):
     SYSTEM_RES_KNOWLEDGE = "SYSTEM_RESOURCE_KNOWLEDGE"
     KNOWLEDGE_HIT_TEST = "KNOWLEDGE_HIT_TEST"
     KNOWLEDGE_DOCUMENT = "KNOWLEDGE_DOCUMENT"
-    KNOWLEDGE_WORKFLOW = "KNOWLEDGE_WORKFLOW"
     KNOWLEDGE_TAG = "KNOWLEDGE_TAG"
     SYSTEM_KNOWLEDGE_DOCUMENT = "SYSTEM_KNOWLEDGE_DOCUMENT"
-    SYSTEM_KNOWLEDGE_WORKFLOW = "SYSTEM_KNOWLEDGE_WORKFLOW"
     SYSTEM_RES_KNOWLEDGE_DOCUMENT = "SYSTEM_RESOURCE_KNOWLEDGE_DOCUMENT"
-    SYSTEM_RES_KNOWLEDGE_WORKFLOW = "SYSTEM_RESOURCE_KNOWLEDGE_WORKFLOW"
     SYSTEM_RES_KNOWLEDGE_TAG = "SYSTEM_RES_KNOWLEDGE_TAG"
     SYSTEM_KNOWLEDGE_TAG = "SYSTEM_KNOWLEDGE_TAG"
 
@@ -351,7 +348,6 @@ Permission_Label = {
     Group.KNOWLEDGE.value: _("Knowledge"),
     Group.KNOWLEDGE_DOCUMENT.value: _("Document"),
     Group.KNOWLEDGE_TERMBASE.value: _("Termbase"),
-    Group.KNOWLEDGE_WORKFLOW.value: _("Workflow"),
     Group.KNOWLEDGE_TAG.value: _("Tag"),
     Group.KNOWLEDGE_PROBLEM.value: _("Problem"),
     Group.KNOWLEDGE_HIT_TEST.value: _("Hit-Test"),
@@ -408,7 +404,6 @@ Permission_Label = {
     Group.SYSTEM_KNOWLEDGE.value: _("Knowledge"),
     Group.SYSTEM_KNOWLEDGE_DOCUMENT.value: _("Document"),
     Group.SYSTEM_KNOWLEDGE_TERMBASE.value: _("Termbase"),
-    Group.SYSTEM_KNOWLEDGE_WORKFLOW.value: _("Workflow"),
     Group.SYSTEM_KNOWLEDGE_TAG.value: _("Tag"),
     Group.SYSTEM_KNOWLEDGE_PROBLEM.value: _("Problem"),
     Group.SYSTEM_KNOWLEDGE_HIT_TEST.value: _("Hit-Test"),
@@ -418,7 +413,6 @@ Permission_Label = {
     Group.SYSTEM_RES_KNOWLEDGE.value: _("Knowledge"),
     Group.SYSTEM_RES_KNOWLEDGE_DOCUMENT.value: _("Document"),
     Group.SYSTEM_RES_KNOWLEDGE_TERMBASE.value: _("Termbase"),
-    Group.SYSTEM_RES_KNOWLEDGE_WORKFLOW.value: _("Workflow"),
     Group.SYSTEM_RES_KNOWLEDGE_TAG.value: _("Tag"),
     Group.SYSTEM_RES_KNOWLEDGE_PROBLEM.value: _("Problem"),
     Group.SYSTEM_RES_KNOWLEDGE_HIT_TEST.value: _("Hit-Test"),
@@ -764,26 +758,6 @@ class PermissionConstants(Enum):
     )
     KNOWLEDGE_FOLDER_AUTH = Permission(
         group=Group.KNOWLEDGE_FOLDER, operate=Operate.AUTH, role_list=[RoleConstants.ADMIN, RoleConstants.USER],
-        resource_permission_group_list=[ResourcePermissionConst.KNOWLEDGE_MANGE],
-        parent_group=[WorkspaceGroup.KNOWLEDGE, UserGroup.KNOWLEDGE]
-    )
-    KNOWLEDGE_WORKFLOW_READ = Permission(
-        group=Group.KNOWLEDGE_WORKFLOW, operate=Operate.READ, role_list=[RoleConstants.ADMIN, RoleConstants.USER],
-        resource_permission_group_list=[ResourcePermissionConst.KNOWLEDGE_VIEW],
-        parent_group=[WorkspaceGroup.KNOWLEDGE, UserGroup.KNOWLEDGE]
-    )
-    KNOWLEDGE_WORKFLOW_EDIT = Permission(
-        group=Group.KNOWLEDGE_WORKFLOW, operate=Operate.EDIT, role_list=[RoleConstants.ADMIN, RoleConstants.USER],
-        resource_permission_group_list=[ResourcePermissionConst.KNOWLEDGE_MANGE],
-        parent_group=[WorkspaceGroup.KNOWLEDGE, UserGroup.KNOWLEDGE]
-    )
-    KNOWLEDGE_WORKFLOW_EXPORT = Permission(
-        group=Group.KNOWLEDGE_WORKFLOW, operate=Operate.EXPORT, role_list=[RoleConstants.ADMIN, RoleConstants.USER],
-        resource_permission_group_list=[ResourcePermissionConst.KNOWLEDGE_MANGE],
-        parent_group=[WorkspaceGroup.KNOWLEDGE, UserGroup.KNOWLEDGE]
-    )
-    KNOWLEDGE_WORKFLOW_PUBLISH = Permission(
-        group=Group.KNOWLEDGE_WORKFLOW, operate=Operate.PUBLISH, role_list=[RoleConstants.ADMIN, RoleConstants.USER],
         resource_permission_group_list=[ResourcePermissionConst.KNOWLEDGE_MANGE],
         parent_group=[WorkspaceGroup.KNOWLEDGE, UserGroup.KNOWLEDGE]
     )
@@ -1488,22 +1462,6 @@ class PermissionConstants(Enum):
         group=Group.SYSTEM_KNOWLEDGE, operate=Operate.RELATE_VIEW, role_list=[RoleConstants.ADMIN],
         parent_group=[SystemGroup.SHARED_KNOWLEDGE], is_ee=settings.edition == "EE"
     )
-    SHARED_KNOWLEDGE_WORKFLOW_READ = Permission(
-        group=Group.SYSTEM_KNOWLEDGE_WORKFLOW, operate=Operate.READ, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.SHARED_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
-    SHARED_KNOWLEDGE_WORKFLOW_EDIT = Permission(
-        group=Group.SYSTEM_KNOWLEDGE_WORKFLOW, operate=Operate.EDIT, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.SHARED_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
-    SHARED_KNOWLEDGE_WORKFLOW_EXPORT = Permission(
-        group=Group.SYSTEM_KNOWLEDGE_WORKFLOW, operate=Operate.EXPORT, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.SHARED_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
-    SHARED_KNOWLEDGE_WORKFLOW_PUBLISH = Permission(
-        group=Group.SYSTEM_KNOWLEDGE_WORKFLOW, operate=Operate.PUBLISH, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.SHARED_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
     SHARED_KNOWLEDGE_DOCUMENT_READ = Permission(
         group=Group.SYSTEM_KNOWLEDGE_DOCUMENT, operate=Operate.READ, role_list=[RoleConstants.ADMIN],
         parent_group=[SystemGroup.SHARED_KNOWLEDGE], is_ee=settings.edition == "EE"
@@ -1772,10 +1730,6 @@ class PermissionConstants(Enum):
         group=Group.SYSTEM_RES_KNOWLEDGE, operate=Operate.EXPORT, role_list=[RoleConstants.ADMIN],
         parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
     )
-    RESOURCE_KNOWLEDGE_PUBLISH = Permission(
-        group=Group.SYSTEM_RES_KNOWLEDGE, operate=Operate.PUBLISH, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
     RESOURCE_KNOWLEDGE_VECTOR = Permission(
         group=Group.SYSTEM_RES_KNOWLEDGE, operate=Operate.VECTOR, role_list=[RoleConstants.ADMIN],
         parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
@@ -1790,23 +1744,6 @@ class PermissionConstants(Enum):
     )
     RESOURCE_KNOWLEDGE_RELATE_RESOURCE_VIEW = Permission(
         group=Group.SYSTEM_RES_KNOWLEDGE, operate=Operate.RELATE_VIEW, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
-    # 文档
-    RESOURCE_KNOWLEDGE_WORKFLOW_READ = Permission(
-        group=Group.SYSTEM_RES_KNOWLEDGE_WORKFLOW, operate=Operate.READ, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
-    RESOURCE_KNOWLEDGE_WORKFLOW_EDIT = Permission(
-        group=Group.SYSTEM_RES_KNOWLEDGE_WORKFLOW, operate=Operate.EDIT, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
-    RESOURCE_KNOWLEDGE_WORKFLOW_EXPORT = Permission(
-        group=Group.SYSTEM_RES_KNOWLEDGE_WORKFLOW, operate=Operate.EXPORT, role_list=[RoleConstants.ADMIN],
-        parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
-    )
-    RESOURCE_KNOWLEDGE_WORKFLOW_PUBLISH = Permission(
-        group=Group.SYSTEM_RES_KNOWLEDGE_WORKFLOW, operate=Operate.PUBLISH, role_list=[RoleConstants.ADMIN],
         parent_group=[SystemGroup.RESOURCE_KNOWLEDGE], is_ee=settings.edition == "EE"
     )
     RESOURCE_KNOWLEDGE_DOCUMENT_READ = Permission(

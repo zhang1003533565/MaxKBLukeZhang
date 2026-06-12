@@ -11,7 +11,6 @@ from typing import Type
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
-from application.flow.common import WorkflowMode
 from application.flow.i_step_node import INode, NodeResult
 
 
@@ -40,4 +39,4 @@ class IKnowledgeWriteNode(INode):
         pass
 
     type = 'knowledge-write-node'
-    support = [WorkflowMode.KNOWLEDGE, WorkflowMode.KNOWLEDGE_LOOP]
+    support = []

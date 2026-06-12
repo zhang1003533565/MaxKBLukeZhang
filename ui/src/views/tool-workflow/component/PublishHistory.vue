@@ -45,7 +45,7 @@
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item
-                          v-if="permissionPrecise.workflow_edit(id)"
+                          v-if="permissionPrecise.edit(id)"
                           @click.stop="openEditVersion(row)"
                         >
                           <AppIcon iconName="app-edit" class="color-secondary"></AppIcon>

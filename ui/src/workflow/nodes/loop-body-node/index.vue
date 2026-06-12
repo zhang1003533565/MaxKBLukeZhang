@@ -12,7 +12,7 @@ import Dagre from '@/workflow/plugins/dagre'
 import { initDefaultShortcut } from '@/workflow/common/shortcut'
 import LoopBodyContainer from '@/workflow/nodes/loop-body-node/LoopBodyContainer.vue'
 import { WorkflowMode } from '@/enums/application'
-import { WorkFlowInstance, KnowledgeWorkFlowInstance } from '@/workflow/common/validate'
+import { WorkFlowInstance } from '@/workflow/common/validate'
 import { t } from '@/locales'
 import { disconnectByFlow } from '@/workflow/common/teleport'
 const loop_workflow_mode = inject('loopWorkflowMode') || WorkflowMode.ApplicationLoop
@@ -21,10 +21,7 @@ const props = defineProps<{ nodeModel: any }>()
 const containerRef = ref()
 const LoopBodyContainerRef = ref<InstanceType<typeof LoopBodyContainer>>()
 const validate = () => {
-  const workflow =
-    loop_workflow_mode == WorkflowMode.ApplicationLoop
-      ? new WorkFlowInstance(lf.value.getGraphData(), WorkflowMode.ApplicationLoop)
-      : new KnowledgeWorkFlowInstance(lf.value.getGraphData(), WorkflowMode.KnowledgeLoop)
+  const workflow = new WorkFlowInstance(lf.value.getGraphData(), loop_workflow_mode as WorkflowMode)
   return Promise.all(lf.value.graphModel.nodes.map((element: any) => element?.validate?.()))
     .then(() => {
       const loop_node_id = props.nodeModel.properties.loop_node_id
@@ -113,7 +110,6 @@ const renderGraphData = (data?: any) => {
       let translateX = lf.value.graphModel.transformModel.TRANSLATE_X
       let translateY = lf.value.graphModel.transformModel.TRANSLATE_Y
       const [x, y] = point
-      props.nodeModel.graphModel.transformModel
       scaleX *= props.nodeModel.graphModel.transformModel.SCALE_X
       scaleY *= props.nodeModel.graphModel.transformModel.SCALE_Y
       translateX *= props.nodeModel.graphModel.transformModel.SCALE_X

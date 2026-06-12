@@ -9,7 +9,7 @@
     separator=" > "
     clearable
   >
-    <template #default="{ node, data }">
+    <template #default="{ data }">
       <span class="flex align-center" @wheel="wheel">
         <component
           :is="iconComponent(`${data.type}-icon`)"
@@ -97,9 +97,7 @@ const get_up_node_field_list = (contain_self: boolean, use_cache: boolean) => {
 }
 const getOptionsValue = () => {
   if (
-    [WorkflowMode.ApplicationLoop, WorkflowMode.KnowledgeLoop, WorkflowMode.ToolLoop].includes(
-      workflowMode,
-    )
+    [WorkflowMode.ApplicationLoop, WorkflowMode.ToolLoop].includes(workflowMode)
   ) {
     return props.global
       ? get_up_node_field_list(false, true).filter(

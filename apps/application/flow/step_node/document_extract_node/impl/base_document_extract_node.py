@@ -1,8 +1,6 @@
 # coding=utf-8
-import ast
 import io
 
-import uuid_utils.compat as uuid
 from django.db.models import QuerySet
 
 from application.flow.common import WorkflowMode
@@ -31,9 +29,7 @@ class BaseDocumentExtractNode(IDocumentExtractNode):
         application_id = None
         tool_id = None
         knowledge_id = None
-        if [WorkflowMode.KNOWLEDGE, WorkflowMode.KNOWLEDGE_LOOP].__contains__(self.workflow_manage.flow.workflow_mode):
-            knowledge_id = self.workflow_params.get('knowledge_id')
-        elif [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP].__contains__(
+        if [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP].__contains__(
                 self.workflow_manage.flow.workflow_mode):
             application_id = self.workflow_manage.work_flow_post_handler.chat_info.application.id
         elif [WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP].__contains__(self.workflow_manage.flow.workflow_mode):

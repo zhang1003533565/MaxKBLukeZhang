@@ -6,7 +6,6 @@ const modules: any = import.meta.glob('./modules/*.ts', { eager: true })
 const knowledgeOnlyModuleNames = new Set(['knowledge.ts', 'model.ts', 'document.ts', 'paragraph.ts', 'system.ts'])
 const knowledgeOnlyRouteNames = new Set([
   'ApplicationWorkflow',
-  'KnowledgeWorkflow',
   'ToolWorkflow',
   'Chat',
   'demo',
@@ -18,7 +17,6 @@ const knowledgeOnlyRouteNames = new Set([
   'tool-index',
   'trigger',
   'trigger-index',
-  'knowledgeWorkflowSetting',
   'ApplicationResourceIndex',
   'ToolResourceIndex',
   'authorizationApplication',
@@ -132,13 +130,6 @@ const baseRoutes: Array<RouteRecordRaw> = [
     name: 'ApplicationWorkflow',
     meta: { activeMenu: '/application' },
     component: () => import('@/views/application-workflow/index.vue'),
-  },
-  // 知识库工作流
-  {
-    path: '/knowledge/:id/:folderId/workflow',
-    name: 'KnowledgeWorkflow',
-    meta: { activeMenu: '/knowledge' },
-    component: () => import('@/views/knowledge-workflow/index.vue'),
   },
   {
     path: '/tool/:id/:folderId/workflow',

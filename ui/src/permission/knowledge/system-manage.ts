@@ -21,7 +21,6 @@ const systemManage = {
     hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_GENERATE], 'OR'),
   edit: () => hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_EDIT], 'OR'),
   export: () => hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_EXPORT], 'OR'),
-  publish: () => hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_PUBLISH], 'OR'),
   delete: () => hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_DELETE], 'OR'),
   // 文档
   doc_read: () =>
@@ -29,7 +28,6 @@ const systemManage = {
       [
         RoleConst.ADMIN,
         PermissionConst.RESOURCE_KNOWLEDGE_DOCUMENT_READ,
-        PermissionConst.RESOURCE_KNOWLEDGE_WORKFLOW_READ,
       ],
       'OR',
     ),
@@ -91,12 +89,6 @@ const systemManage = {
     hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_TAG_EDIT], 'OR'),
   tag_delete: () =>
     hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_TAG_DELETE], 'OR'),
-  debug: () =>
-    hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_WORKFLOW_READ], 'OR'),
-  workflow_edit: () =>
-    hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_WORKFLOW_EDIT], 'OR'),
-  workflow_export: () =>
-    hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_WORKFLOW_EXPORT], 'OR'),
   chat_user_edit: () => false,
 
   auth: () => hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_AUTH], 'OR'),

@@ -9,14 +9,13 @@ from common.auth.authentication import has_permissions, check_batch_permissions,
 from common.constants.permission_constants import PermissionConstants, RoleConstants, ViewPermission, CompareConstants
 from common.log.log import log
 from common import result
-from knowledge.api.knowledge import KnowledgeBaseCreateAPI, KnowledgeWebCreateAPI, KnowledgeTreeReadAPI, \
-    KnowledgeEditAPI, KnowledgeReadAPI, KnowledgePageAPI, SyncWebAPI, GenerateRelatedAPI, HitTestAPI, EmbeddingAPI, \
+from knowledge.api.knowledge import KnowledgeBaseCreateAPI, KnowledgeTreeReadAPI, \
+    KnowledgeEditAPI, KnowledgeReadAPI, KnowledgePageAPI, GenerateRelatedAPI, HitTestAPI, EmbeddingAPI, \
     GetModelAPI, KnowledgeExportAPI, KnowledgeBatchOperateAPI, KnowledgeImportAPI
 from knowledge.models import KnowledgeScope
 from knowledge.serializers.common import get_knowledge_operation_object
 from knowledge.serializers.knowledge import KnowledgeSerializer, KnowledgeBatchOperateSerializer
 from models_provider.serializers.model_serializer import ModelSerializer
-from tools.api.tool import GetInternalToolAPI
 from django.db.models import QuerySet
 from knowledge.models import Knowledge
 
@@ -241,41 +240,6 @@ class KnowledgeView(APIView):
                 }
             ).page(current_page, page_size))
 
-    class SyncWeb(APIView):
-        authentication_classes = [TokenAuth]
-
-        @extend_schema(
-            methods=['PUT'],
-            summary=_("Synchronize the knowledge base of the website"),
-            description=_("Synchronize the knowledge base of the website"),
-            operation_id=_("Synchronize the knowledge base of the website"),  # type: ignore
-            parameters=SyncWebAPI.get_parameters(),
-            request=SyncWebAPI.get_request(),
-            responses=SyncWebAPI.get_response(),
-            tags=[_('Knowledge Base')]  # type: ignore
-        )
-        @has_permissions(
-            PermissionConstants.KNOWLEDGE_SYNC.get_workspace_knowledge_permission(),
-            PermissionConstants.KNOWLEDGE_SYNC.get_workspace_permission_workspace_manage_role(),
-            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
-            ViewPermission([RoleConstants.USER.get_workspace_role()],
-                           [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()], CompareConstants.AND),
-        )
-        @log(
-            menu='Knowledge Base', operate="Synchronize the knowledge base of the website",
-            get_operation_object=lambda r, keywords: get_knowledge_operation_object(keywords.get('knowledge_id')),
-
-        )
-        def put(self, request: Request, workspace_id: str, knowledge_id: str):
-            return result.success(KnowledgeSerializer.SyncWeb(
-                data={
-                    'workspace_id': workspace_id,
-                    'sync_type': request.query_params.get('sync_type'),
-                    'knowledge_id': knowledge_id,
-                    'user_id': str(request.user.id)
-                }
-            ).sync())
-
     class HitTest(APIView):
         authentication_classes = [TokenAuth]
 
@@ -308,23 +272,6 @@ class KnowledgeView(APIView):
                     'search_mode': request.data.get('search_mode')
                 }
             ).hit_test())
-
-    class StoreKnowledge(APIView):
-        authentication_classes = [TokenAuth]
-
-        @extend_schema(
-            methods=['GET'],
-            description=_("Get Appstore tools"),
-            summary=_("Get Appstore tools"),
-            operation_id=_("Get Appstore tools"),  # type: ignore
-            responses=GetInternalToolAPI.get_response(),
-            tags=[_("Tool")]  # type: ignore
-        )
-        def get(self, request: Request):
-            return result.success(KnowledgeSerializer.StoreKnowledge(data={
-                'user_id': request.user.id,
-                'name': request.query_params.get('name', ''),
-            }).get_appstore_templates())
 
     class Embedding(APIView):
         authentication_classes = [TokenAuth]
@@ -543,25 +490,6 @@ class KnowledgeView(APIView):
                 }
             ).list(workspace_id, True))
 
-    class TransformWorkflow(APIView):
-        authentication_classes = [TokenAuth]
-
-        @has_permissions(
-            PermissionConstants.KNOWLEDGE_EDIT.get_workspace_knowledge_permission(),
-            PermissionConstants.KNOWLEDGE_EDIT.get_workspace_permission_workspace_manage_role(),
-            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
-            ViewPermission([RoleConstants.USER.get_workspace_role()],
-                           [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()], CompareConstants.AND),
-        )
-        @log(
-            menu='Knowledge Base', operate="Modify knowledge base information",
-            get_operation_object=lambda r, keywords: get_knowledge_operation_object(keywords.get('knowledge_id')),
-        )
-        def post(self, request: Request, workspace_id: str, knowledge_id: str):
-            return result.success(KnowledgeSerializer.TransformWorkflow(
-                data={'user_id': request.user.id, 'workspace_id': workspace_id, 'knowledge_id': knowledge_id}
-            ).transform(request.data))
-
     class Tags(APIView):
         authentication_classes = [TokenAuth]
 
@@ -612,35 +540,3 @@ class KnowledgeBaseView(APIView):
         return result.success(KnowledgeSerializer.Create(
             data={'user_id': request.user.id, 'workspace_id': workspace_id}
         ).save_base(request.data))
-
-
-class KnowledgeWebView(APIView):
-    authentication_classes = [TokenAuth]
-
-    @extend_schema(
-        methods=['POST'],
-        description=_('Create web knowledge'),
-        summary=_('Create web knowledge'),
-        operation_id=_('Create web knowledge'),  # type: ignore
-        parameters=KnowledgeWebCreateAPI.get_parameters(),
-        request=KnowledgeWebCreateAPI.get_request(),
-        responses=KnowledgeWebCreateAPI.get_response(),
-        tags=[_('Knowledge Base')]  # type: ignore
-    )
-    @has_permissions(
-        PermissionConstants.KNOWLEDGE_CREATE.get_workspace_permission(),
-        RoleConstants.WORKSPACE_MANAGE.get_workspace_role(), RoleConstants.USER.get_workspace_role()
-    )
-    @log(
-        menu='Knowledge Base', operate="Create a web site knowledge base",
-        get_operation_object=lambda r, k: {'name': r.data.get('name'), 'desc': r.data.get('desc'),
-                                           'first_list': r.FILES.getlist('file'),
-                                           'meta': {'source_url': r.data.get('source_url'),
-                                                    'selector': r.data.get('selector'),
-                                                    'embedding_model_id': r.data.get('embedding_model_id')}}
-        ,
-    )
-    def post(self, request: Request, workspace_id: str):
-        return result.success(KnowledgeSerializer.Create(
-            data={'user_id': request.user.id, 'workspace_id': workspace_id}
-        ).save_web(request.data))

@@ -760,50 +760,6 @@ export const loopBreakNode = {
   },
 }
 
-export const knowledgeMenuNodes = [
-  {
-    label: t('views.tool.dataSource.title'),
-    list: [dataSourceLocalNode, dataSourceWebNode],
-  },
-  {
-    label: t('views.knowledge.title'),
-    list: [documentSplitNode, knowledgeWriteNode, documentExtractNode],
-  },
-  {
-    label: t('workflow.nodes.classify.aiCapability'),
-    list: [
-      aiChatNode,
-      intentNode,
-      textToSpeechNode,
-      speechToTextNode,
-      imageGenerateNode,
-      imageUnderstandNode,
-      textToVideoNode,
-      imageToVideoNode,
-      videoUnderstandNode,
-      questionNode,
-    ],
-  },
-
-  {
-    label: t('workflow.nodes.classify.businessLogic'),
-    list: [conditionNode, replyNode, loopNode],
-  },
-  {
-    label: t('workflow.nodes.classify.dataProcessing'),
-    list: [
-      variableAssignNode,
-      variableAggregationNode,
-      variableSplittingNode,
-      parameterExtractionNode,
-    ],
-  },
-  {
-    label: t('common.other'),
-    list: [mcpNode, toolNode],
-  },
-]
-
 export const menuNodes = [
   {
     label: t('workflow.nodes.classify.aiCapability'),
@@ -880,57 +836,7 @@ export const applicationLoopMenuNodes = [
     list: [mcpNode, toolNode],
   },
 ]
-export const knowledgeLoopMenuNodes = [
-  {
-    label: t('views.tool.dataSource.title'),
-    list: [dataSourceLocalNode, dataSourceWebNode],
-  },
-  {
-    label: t('views.knowledge.title'),
-    list: [documentSplitNode, knowledgeWriteNode, documentExtractNode],
-  },
-  {
-    label: t('workflow.nodes.classify.aiCapability'),
-    list: [
-      aiChatNode,
-      intentNode,
-      textToSpeechNode,
-      speechToTextNode,
-      imageGenerateNode,
-      imageUnderstandNode,
-      textToVideoNode,
-      imageToVideoNode,
-      videoUnderstandNode,
-      questionNode,
-    ],
-  },
-  {
-    label: t('workflow.nodes.classify.businessLogic'),
-    list: [conditionNode, replyNode, loopContinueNode, loopBreakNode],
-  },
-  {
-    label: t('workflow.nodes.classify.dataProcessing'),
-    list: [
-      variableAssignNode,
-      variableAggregationNode,
-      variableSplittingNode,
-      parameterExtractionNode,
-    ],
-  },
-  {
-    label: t('common.other'),
-    list: [mcpNode, toolNode],
-  },
-]
 export const toolLoopMenuNodes = [
-  {
-    label: t('views.tool.dataSource.title'),
-    list: [dataSourceLocalNode, dataSourceWebNode],
-  },
-  {
-    label: t('views.knowledge.title'),
-    list: [documentSplitNode, knowledgeWriteNode, documentExtractNode],
-  },
   {
     label: t('workflow.nodes.classify.aiCapability'),
     list: [
@@ -1015,12 +921,6 @@ export const getMenuNodes = (workflowMode: WorkflowMode) => {
   if (workflowMode == WorkflowMode.ApplicationLoop) {
     return applicationLoopMenuNodes
   }
-  if (workflowMode == WorkflowMode.Knowledge) {
-    return knowledgeMenuNodes
-  }
-  if (workflowMode == WorkflowMode.KnowledgeLoop) {
-    return knowledgeLoopMenuNodes
-  }
   if (workflowMode == WorkflowMode.Tool) {
     return toolMenuNodes
   }
@@ -1038,16 +938,6 @@ export const workflowModelDict: any = {
   [WorkflowMode.ApplicationLoop]: (node: any) => {
     return (
       ['application-node', 'tool-workflow-lib-node', 'tool-lib-node'].includes(node.type) &&
-      node?.properties?.node_data?.tool_type !== 'DATA_SOURCE'
-    )
-  },
-  [WorkflowMode.Knowledge]: (node: any) => {
-    console.log(['tool-workflow-lib-node', 'tool-lib-node'].includes(node))
-    return ['tool-workflow-lib-node', 'tool-lib-node'].includes(node.type)
-  },
-  [WorkflowMode.KnowledgeLoop]: (node: any) => {
-    return (
-      ['tool-workflow-lib-node', 'tool-lib-node'].includes(node.type) &&
       node?.properties?.node_data?.tool_type !== 'DATA_SOURCE'
     )
   },
@@ -1465,32 +1355,8 @@ ${t('workflow.nodes.formNode.form_content_format2')}`,
 ].forEach(([fields, keys]) => bindFieldLabels(fields as Array<any>, keys as string[]))
 ;[
   [
-    knowledgeMenuNodes,
-    [
-      'views.tool.dataSource.title',
-      'views.knowledge.title',
-      'workflow.nodes.classify.aiCapability',
-      'workflow.nodes.classify.businessLogic',
-      'workflow.nodes.classify.dataProcessing',
-      'common.other',
-    ],
-  ],
-  [
-    knowledgeLoopMenuNodes,
-    [
-      'views.tool.dataSource.title',
-      'views.knowledge.title',
-      'workflow.nodes.classify.aiCapability',
-      'workflow.nodes.classify.businessLogic',
-      'workflow.nodes.classify.dataProcessing',
-      'common.other',
-    ],
-  ],
-  [
     toolLoopMenuNodes,
     [
-      'views.tool.dataSource.title',
-      'views.knowledge.title',
       'workflow.nodes.classify.aiCapability',
       'workflow.nodes.classify.businessLogic',
       'workflow.nodes.classify.dataProcessing',

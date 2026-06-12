@@ -95,10 +95,6 @@ class WorkflowMode(Enum):
 
     APPLICATION_LOOP = "application-loop"
 
-    KNOWLEDGE = "knowledge"
-
-    KNOWLEDGE_LOOP = "knowledge-loop"
-
     TOOL = "tool"
 
     TOOL_LOOP = "tool-loop"

@@ -73,14 +73,8 @@
 
         <el-table-column prop="tool_type" :label="$t('common.type')" width="110">
           <template #default="{ row }">
-            <span v-if="row.type === 1">{{
-                $t('views.knowledge.knowledgeType.webKnowledge')
-              }}</span>
-            <span v-else-if="row.type === 2">{{
+            <span v-if="row.type === 2">{{
                 $t('views.knowledge.knowledgeType.larkKnowledge')
-              }}</span>
-            <span v-else-if="row.type === 4">{{
-                $t('views.knowledge.knowledgeType.workflowKnowledge')
               }}</span>
             <span v-else>{{ $t('views.knowledge.knowledgeType.generalKnowledge') }}</span>
           </template>
@@ -208,14 +202,6 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item
-                    @click.stop="syncKnowledge(row)"
-                    v-if="row.type === 1 && permissionPrecise.sync()"
-                  >
-                    <AppIcon iconName="app-sync" class="color-secondary"></AppIcon>
-                    {{ $t('views.knowledge.setting.sync') }}
-                  </el-dropdown-item>
-
-                  <el-dropdown-item
                     @click.stop="openGenerateDialog(row)"
                     v-if="permissionPrecise.generate()"
                   >
@@ -290,7 +276,6 @@
         </el-table-column>
       </app-table>
     </el-card>
-    <SyncWebDialog ref="SyncWebDialogRef"/>
     <GenerateRelatedDialog ref="GenerateRelatedDialogRef" apiType="systemManage"/>
     <ResourceAuthorizationDrawer
       :type="SourceTypeEnum.KNOWLEDGE"
@@ -302,10 +287,9 @@
 
 <script lang="ts" setup>
 import {onMounted, ref, reactive, computed, watch} from 'vue'
-import {useRouter, useRoute} from 'vue-router'
+import {useRouter} from 'vue-router'
 import KnowledgeResourceApi from '@/api/system-resource-management/knowledge'
 import UserApi from '@/api/user/user'
-import SyncWebDialog from '@/views/knowledge/component/SyncWebDialog.vue'
 import GenerateRelatedDialog from '@/components/generate-related-dialog/index.vue'
 import ResourceAuthorizationDrawer from '@/components/resource-authorization-drawer/index.vue'
 import {datetimeFormat} from '@/utils/time'
@@ -316,7 +300,7 @@ import {SourceTypeEnum} from '@/enums/common'
 import {t} from '@/locales'
 import useStore from '@/stores'
 import {hasPermission} from '@/utils/permission'
-import {PermissionConst, RoleConst} from '@/utils/permission/data'
+import {RoleConst} from '@/utils/permission/data'
 import ResourceMappingDrawer from '@/components/resource_mapping/index.vue'
 
 const router = useRouter()
@@ -332,13 +316,12 @@ const ManagePermission = () => {
     permissionPrecise.value.problem_read() ||
     permissionPrecise.value.edit() ||
     permissionPrecise.value.knowledge_chat_user_read() ||
-    permissionPrecise.value.hit_test() ||
-    hasPermission([RoleConst.ADMIN, PermissionConst.RESOURCE_KNOWLEDGE_WORKFLOW_READ], 'OR')
+    permissionPrecise.value.hit_test()
   )
 }
 
 const MoreFilledPermission = () => {
-  return (['sync', 'generate', 'edit', 'export', 'delete', 'auth', 'relate_map'] as const).some(
+  return (['generate', 'edit', 'export', 'delete', 'auth', 'relate_map'] as const).some(
     (key) => permissionPrecise.value[key](),
   )
 }
@@ -356,16 +339,8 @@ const type_options = ref<any[]>([
     value: '0',
   },
   {
-    label: t('views.knowledge.knowledgeType.webKnowledge'),
-    value: '1',
-  },
-  {
     label: t('views.knowledge.knowledgeType.larkKnowledge'),
     value: '2',
-  },
-  {
-    label: t('views.knowledge.knowledgeType.workflowKnowledge'),
-    value: '4',
   },
 ])
 const loading = ref(false)
@@ -426,12 +401,6 @@ function openGenerateDialog(row: any) {
   if (GenerateRelatedDialogRef.value) {
     GenerateRelatedDialogRef.value.open([], 'knowledge', row)
   }
-}
-
-const SyncWebDialogRef = ref()
-
-function syncKnowledge(row: any) {
-  SyncWebDialogRef.value.open(row.id)
 }
 
 function reEmbeddingKnowledge(row: any) {

@@ -107,7 +107,7 @@ def convert_value(name: str, value, _type, is_required, source, node):
     try:
         value = node.workflow_manage.generate_prompt(value)
         return common_convert_value(_type, value)
-    except Exception as e:
+    except Exception:
         raise Exception(
             _('Field: {name} Type: {_type} Value: {value} Type error').format(name=name, _type=_type,
                                                                               value=value))
@@ -242,11 +242,7 @@ class BaseToolLibNodeNode(IToolLibNode):
                     k: v for k, v in all_params.items()
                     if k not in tool_init_params
                 }
-            if [WorkflowMode.KNOWLEDGE, WorkflowMode.KNOWLEDGE_LOOP].__contains__(
-                    self.workflow_manage.flow.workflow_mode):
-                source_id = self.workflow_manage.params.get('knowledge_id')
-                source_type = ToolTaskTypeChoices.KNOWLEDGE.value
-            elif [WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP].__contains__(self.workflow_manage.flow.workflow_mode):
+            if [WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP].__contains__(self.workflow_manage.flow.workflow_mode):
                 source_id = self.workflow_manage.params.get('tool_id')
                 source_type = ToolTaskTypeChoices.TOOL.value
             else:

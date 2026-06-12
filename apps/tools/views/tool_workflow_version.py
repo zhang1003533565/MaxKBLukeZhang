@@ -17,9 +17,9 @@ from common.auth import TokenAuth
 from common.auth.authentication import has_permissions
 from common.constants.permission_constants import PermissionConstants, RoleConstants, ViewPermission, CompareConstants
 from common.log.log import log
-from knowledge.api.knowledge_version import KnowledgeVersionListAPI, KnowledgeVersionPageAPI, \
-    KnowledgeVersionOperateAPI
 from knowledge.models import Knowledge
+from tools.api.tool_workflow import ToolWorkflowVersionListApi, ToolWorkflowVersionOperateApi, \
+    ToolWorkflowVersionPageApi
 from tools.serializers.tool_version import ToolWorkflowVersionSerializer
 from tools.views import get_tool_operation_object
 
@@ -41,8 +41,8 @@ class ToolWorkflowVersionView(APIView):
         description=_("Get the tool version list"),
         summary=_("Get the tool version list"),
         operation_id=_("Get the tool version list"),  # type: ignore
-        parameters=KnowledgeVersionListAPI.get_parameters(),
-        responses=KnowledgeVersionListAPI.get_response(),
+        parameters=ToolWorkflowVersionListApi.get_parameters(),
+        responses=ToolWorkflowVersionListApi.get_response(),
         tags=[_('Tool/Version')]  # type: ignore
     )
     @has_permissions(PermissionConstants.TOOL_READ.get_workspace_tool_permission(),
@@ -65,8 +65,8 @@ class ToolWorkflowVersionView(APIView):
             description=_("Get the list of tool versions by page"),
             summary=_("Get the list of tool versions by page"),
             operation_id=_("Get the list of tool versions by page"),  # type: ignore
-            parameters=KnowledgeVersionPageAPI.get_parameters(),
-            responses=KnowledgeVersionPageAPI.get_response(),
+            parameters=ToolWorkflowVersionPageApi.get_parameters(),
+            responses=ToolWorkflowVersionPageApi.get_response(),
             tags=[_('Tool/Version')]  # type: ignore
         )
         @has_permissions(PermissionConstants.TOOL_READ.get_workspace_tool_permission(),
@@ -90,8 +90,8 @@ class ToolWorkflowVersionView(APIView):
             description=_("Get tool version details"),
             summary=_("Get tool version details"),
             operation_id=_("Get tool version details"),  # type: ignore
-            parameters=KnowledgeVersionOperateAPI.get_parameters(),
-            responses=KnowledgeVersionOperateAPI.get_response(),
+            parameters=ToolWorkflowVersionOperateApi.get_parameters(),
+            responses=ToolWorkflowVersionOperateApi.get_response(),
             tags=[_('Tool/Version')]  # type: ignore
         )
         @has_permissions(PermissionConstants.TOOL_READ.get_workspace_tool_permission(),
@@ -111,9 +111,9 @@ class ToolWorkflowVersionView(APIView):
             description=_("Modify tool version information"),
             summary=_("Modify tool version information"),
             operation_id=_("Modify tool version information"),  # type: ignore
-            parameters=KnowledgeVersionOperateAPI.get_parameters(),
+            parameters=ToolWorkflowVersionOperateApi.get_parameters(),
             request=None,
-            responses=KnowledgeVersionOperateAPI.get_response(),
+            responses=ToolWorkflowVersionOperateApi.get_response(),
             tags=[_('Tool/Version')]  # type: ignore
         )
         @has_permissions(PermissionConstants.TOOL_EDIT.get_workspace_tool_permission(),

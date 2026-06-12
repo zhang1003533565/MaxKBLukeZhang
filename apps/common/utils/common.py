@@ -350,8 +350,7 @@ ALLOWED_CLASSES = {
     ("builtins", "dict"),
     ('uuid', 'UUID'),
     ("application.serializers.application", "MKInstance"),
-    ("tools.serializers.tool", "ToolInstance"),
-    ("knowledge.serializers.knowledge_workflow", "KBWFInstance")
+    ("tools.serializers.tool", "ToolInstance")
 }
 
 

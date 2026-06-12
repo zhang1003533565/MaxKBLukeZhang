@@ -15,8 +15,7 @@ class DocumentExtractNodeSerializer(serializers.Serializer):
 
 class IDocumentExtractNode(INode):
     type = 'document-extract-node'
-    support = [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP, WorkflowMode.KNOWLEDGE_LOOP,
-               WorkflowMode.KNOWLEDGE, WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP]
+    support = [WorkflowMode.APPLICATION, WorkflowMode.APPLICATION_LOOP, WorkflowMode.TOOL, WorkflowMode.TOOL_LOOP]
 
     def get_node_params_serializer_class(self) -> Type[serializers.Serializer]:
         return DocumentExtractNodeSerializer

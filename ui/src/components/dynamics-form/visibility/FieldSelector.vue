@@ -9,7 +9,7 @@
     separator=" > "
     clearable
   >
-    <template #default="{ node, data }">
+    <template #default="{ data }">
       <span class="flex align-center" @wheel="wheel">
         <component
           v-if="data.type"
@@ -146,9 +146,7 @@ const injectDraftSiblings = (rawList: Array<any>) => {
 const getOptionsValue = () => {
   if (!props.nodeModel) return []
   if (
-    [WorkflowMode.ApplicationLoop, WorkflowMode.KnowledgeLoop, WorkflowMode.ToolLoop].includes(
-      workflowMode,
-    )
+    [WorkflowMode.ApplicationLoop, WorkflowMode.ToolLoop].includes(workflowMode)
   ) {
     const list = props.global
       ? get_up_node_field_list(true, true).filter(

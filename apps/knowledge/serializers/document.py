@@ -2,7 +2,6 @@ import io
 import json
 import os
 import re
-import traceback
 from collections import defaultdict
 from functools import reduce
 from tempfile import TemporaryDirectory
@@ -12,7 +11,6 @@ import openpyxl
 import uuid_utils.compat as uuid
 from celery_once import AlreadyQueued
 from common.db.search import get_dynamics_model, native_page_search, native_search
-from common.event.common import work_thread_pool
 from common.event.listener_manage import ListenerManagement
 from common.exception.app_exception import AppApiException
 from common.field.common import UploadedFileField
@@ -33,9 +31,7 @@ from common.handle.impl.text.xls_split_handle import XlsSplitHandle
 from common.handle.impl.text.xlsx_split_handle import XlsxSplitHandle
 from common.handle.impl.text.zip_split_handle import ZipSplitHandle
 from common.utils.common import bulk_create_in_batches, get_file_content, parse_image, post
-from common.utils.fork import Fork
-from common.utils.logger import maxkb_logger
-from common.utils.split_model import flat_map, get_split_model
+from common.utils.split_model import flat_map
 from django.contrib.postgres.fields import JSONField
 from django.core import validators
 from django.db import models, transaction
@@ -44,7 +40,7 @@ from django.db.models.aggregates import Max
 from django.db.models.functions import Coalesce, NullIf, Reverse, Substr
 from django.db.models.query_utils import Q
 from django.http import HttpResponse
-from django.utils.translation import get_language, gettext, to_locale
+from django.utils.translation import get_language, gettext
 from django.utils.translation import gettext_lazy as _
 from maxkb.const import PROJECT_DIR
 from models_provider.models import Model
@@ -90,7 +86,6 @@ from knowledge.task.embedding import (
     update_embedding_knowledge_id,
 )
 from knowledge.task.generate import generate_related_by_document_id
-from knowledge.task.sync import sync_web_document
 
 default_split_handle = TextSplitHandle()
 split_handles = [
@@ -129,7 +124,7 @@ class BatchCancelInstanceSerializer(serializers.Serializer):
         _type = self.data.get("type")
         try:
             TaskType(_type)
-        except Exception as e:
+        except Exception:
             raise AppApiException(500, _("task type not support"))
 
 
@@ -149,7 +144,7 @@ class CancelInstanceSerializer(serializers.Serializer):
         _type = self.data.get("type")
         try:
             TaskType(_type)
-        except Exception as e:
+        except Exception:
             raise AppApiException(500, _("task type not support"))
 
 
@@ -180,7 +175,6 @@ class DocumentEditInstanceSerializer(serializers.Serializer):
     def get_meta_valid_map():
         knowledge_meta_valid_map = {
             KnowledgeType.BASE: MetaSerializer.BaseMeta,
-            KnowledgeType.WEB: MetaSerializer.WebMeta,
         }
         return knowledge_meta_valid_map
 
@@ -200,15 +194,6 @@ class DocumentSplitRequest(serializers.Serializer):
         required=False, child=serializers.CharField(required=True, label=_("patterns")), label=_("patterns")
     )
     with_filter = serializers.BooleanField(required=False, label=_("Auto Clean"))
-
-
-class DocumentWebInstanceSerializer(serializers.Serializer):
-    source_url_list = serializers.ListField(
-        required=True,
-        label=_("document url list"),
-        child=serializers.CharField(required=True, label=_("document url list")),
-    )
-    selector = serializers.CharField(required=False, allow_null=True, allow_blank=True, label=_("selector"))
 
 
 class DocumentInstanceQASerializer(serializers.Serializer):
@@ -412,14 +397,7 @@ class DocumentSerializers(serializers.Serializer):
                 problem_paragraph_mapping_list, ["problem_id", "knowledge_id"]
             )
             # 修改文档
-            if knowledge.type == KnowledgeType.BASE.value and target_knowledge.type == KnowledgeType.WEB.value:
-                document_list.update(
-                    knowledge_id=target_knowledge_id, type=KnowledgeType.WEB, meta={"source_url": "", "selector": ""}
-                )
-            elif target_knowledge.type == KnowledgeType.BASE.value and knowledge.type == KnowledgeType.WEB.value:
-                document_list.update(knowledge_id=target_knowledge_id, type=KnowledgeType.BASE, meta={})
-            else:
-                document_list.update(knowledge_id=target_knowledge_id)
+            document_list.update(knowledge_id=target_knowledge_id)
             model_id = None
             if knowledge.embedding_model_id != target_knowledge.embedding_model_id:
                 model_id = get_embedding_model_id_by_knowledge_id(target_knowledge_id)
@@ -582,104 +560,6 @@ class DocumentSerializers(serializers.Serializer):
                 ),
             )
 
-    class Sync(serializers.Serializer):
-        workspace_id = serializers.CharField(required=False, label=_("workspace id"))
-        knowledge_id = serializers.UUIDField(required=False, label=_("knowledge id"))
-        document_id = serializers.UUIDField(required=True, label=_("document id"))
-
-        def is_valid(self, *, raise_exception=False):
-            super().is_valid(raise_exception=True)
-            workspace_id = self.data.get("workspace_id")
-            query_set = QuerySet(Knowledge).filter(id=self.data.get("knowledge_id"))
-            if workspace_id:
-                query_set = query_set.filter(workspace_id=workspace_id)
-            if not query_set.exists():
-                raise AppApiException(500, _("Knowledge id does not exist"))
-            document_id = self.data.get("document_id")
-            first = QuerySet(Document).filter(id=document_id).first()
-            if first is None:
-                raise AppApiException(500, _("document id not exist"))
-            if first.type != KnowledgeType.WEB:
-                raise AppApiException(500, _("Synchronization is only supported for web site types"))
-
-        @transaction.atomic
-        def sync(self, with_valid=True, with_embedding=True):
-            if with_valid:
-                self.is_valid(raise_exception=True)
-            document_id = self.data.get("document_id")
-            document = QuerySet(Document).filter(id=document_id).first()
-            state = State.SUCCESS
-            if document.type != KnowledgeType.WEB:
-                return True
-            try:
-                ListenerManagement.update_status(
-                    QuerySet(Document).filter(id=document_id), TaskType.SYNC, State.PENDING
-                )
-                ListenerManagement.get_aggregation_document_status(document_id)()
-                source_url = document.meta.get("source_url")
-                selector_list = (
-                    document.meta.get("selector").split(" ")
-                    if "selector" in document.meta and document.meta.get("selector") is not None
-                    else []
-                )
-                result = Fork(source_url, selector_list).fork()
-                if result.status == 200:
-                    # 删除段落
-                    QuerySet(model=Paragraph).filter(document_id=document_id).delete()
-                    # 删除问题
-                    QuerySet(model=ProblemParagraphMapping).filter(document_id=document_id).delete()
-                    delete_problems_and_mappings([document_id])
-                    # 删除向量库
-                    delete_embedding_by_document(document_id)
-                    paragraphs = get_split_model("web.md").parse(result.content)
-                    char_length = reduce(lambda x, y: x + y, [len(p.get("content")) for p in paragraphs], 0)
-                    QuerySet(Document).filter(id=document_id).update(char_length=char_length)
-                    document_paragraph_model = DocumentSerializers.Create.get_paragraph_model(document, paragraphs)
-
-                    paragraph_model_list = document_paragraph_model.get("paragraph_model_list")
-                    problem_paragraph_object_list = document_paragraph_model.get("problem_paragraph_object_list")
-                    problem_model_list, problem_paragraph_mapping_list = ProblemParagraphManage(
-                        problem_paragraph_object_list, document.knowledge_id
-                    ).to_problem_model_list()
-                    # 批量插入段落
-                    if len(paragraph_model_list) > 0:
-                        max_position = (
-                            Paragraph.objects.filter(document_id=document_id).aggregate(max_position=Max("position"))[
-                                "max_position"
-                            ]
-                            or 0
-                        )
-                        for i, paragraph in enumerate(paragraph_model_list):
-                            paragraph.position = max_position + i + 1
-                        QuerySet(Paragraph).bulk_create(paragraph_model_list)
-                    # 批量插入问题
-                    QuerySet(Problem).bulk_create(problem_model_list) if len(problem_model_list) > 0 else None
-                    # 插入关联问题
-                    QuerySet(ProblemParagraphMapping).bulk_create(problem_paragraph_mapping_list) if len(
-                        problem_paragraph_mapping_list
-                    ) > 0 else None
-                    # 向量化
-                    if with_embedding:
-                        embedding_model_id = get_embedding_model_id_by_knowledge_id(document.knowledge_id)
-                        ListenerManagement.update_status(
-                            QuerySet(Document).filter(id=document_id), TaskType.EMBEDDING, State.PENDING
-                        )
-                        ListenerManagement.update_status(
-                            QuerySet(Paragraph).filter(document_id=document_id), TaskType.EMBEDDING, State.PENDING
-                        )
-                        ListenerManagement.get_aggregation_document_status(document_id)()
-                        embedding_by_document.delay(document_id, embedding_model_id)
-
-                else:
-                    state = State.FAILURE
-            except Exception as e:
-                maxkb_logger.error(f"{str(e)}:{traceback.format_exc()}")
-                state = State.FAILURE
-            ListenerManagement.update_status(QuerySet(Document).filter(id=document_id), TaskType.SYNC, state)
-            ListenerManagement.update_status(QuerySet(Paragraph).filter(document_id=document_id), TaskType.SYNC, state)
-            ListenerManagement.get_aggregation_document_status(document_id)()
-            return True
-
     class Operate(serializers.Serializer):
         workspace_id = serializers.CharField(required=False, label=_("workspace id"), allow_blank=True)
         document_id = serializers.UUIDField(required=True, label=_("document id"))
@@ -718,7 +598,7 @@ class DocumentSerializers(serializers.Serializer):
             data_dict, document_dict = self.merge_problem(paragraph_list, problem_mapping_list, [document])
             workbook = self.get_workbook(data_dict, document_dict)
             response = HttpResponse(content_type="application/vnd.ms-excel")
-            response["Content-Disposition"] = f'attachment; filename="data.xlsx"'
+            response["Content-Disposition"] = 'attachment; filename="data.xlsx"'
             workbook.save(response)
             return response
 
@@ -854,7 +734,6 @@ class DocumentSerializers(serializers.Serializer):
                 self.is_valid(raise_exception=True)
             knowledge = QuerySet(Knowledge).filter(id=self.data.get("knowledge_id")).first()
             embedding_model_id = knowledge.embedding_model_id
-            knowledge_user_id = knowledge.user_id
             embedding_model = QuerySet(Model).filter(id=embedding_model_id).first()
             if embedding_model is None:
                 raise AppApiException(500, _("Model does not exist"))
@@ -877,7 +756,7 @@ class DocumentSerializers(serializers.Serializer):
 
             try:
                 embedding_by_document.delay(document_id, embedding_model_id, state_list)
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("The task is being executed, please do not send it repeatedly."))
 
         def tokenize(self, state_list=None, with_valid=True):
@@ -915,7 +794,7 @@ class DocumentSerializers(serializers.Serializer):
 
             try:
                 tokenize_by_document.delay(document_id, state_list)
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("The task is being executed, please do not send it repeatedly."))
 
         @staticmethod
@@ -1103,16 +982,6 @@ class DocumentSerializers(serializers.Serializer):
             return DocumentSerializers.Create.get_paragraph_model(
                 document_model, instance.get("paragraphs") if "paragraphs" in instance else []
             )
-
-        def save_web(self, instance: Dict, with_valid=True):
-            if with_valid:
-                DocumentWebInstanceSerializer(data=instance).is_valid(raise_exception=True)
-                self.is_valid(raise_exception=True)
-            knowledge_id = self.data.get("knowledge_id")
-            user_id = self.data.get("user_id")
-            source_url_list = instance.get("source_url_list")
-            selector = instance.get("selector")
-            sync_web_document.delay(knowledge_id, user_id, source_url_list, selector)
 
         def save_qa(self, instance: Dict, with_valid=True):
             if with_valid:
@@ -1424,26 +1293,6 @@ class DocumentSerializers(serializers.Serializer):
                 workspace_id,
             )
 
-        def batch_sync(self, instance: Dict, with_valid=True):
-            if with_valid:
-                BatchSerializer(data=instance).is_valid(model=Document, raise_exception=True)
-                self.is_valid(raise_exception=True)
-            # 异步同步
-            work_thread_pool.submit(
-                lambda doc_ids: [
-                    DocumentSerializers.Sync(
-                        data={
-                            "document_id": doc_id,
-                            "knowledge_id": self.data.get("knowledge_id"),
-                            "workspace_id": self.data.get("workspace_id"),
-                        }
-                    ).sync()
-                    for doc_id in doc_ids
-                ],
-                instance.get("id_list"),
-            )
-            return True
-
         @transaction.atomic
         def batch_delete(self, instance: Dict, with_valid=True):
             if with_valid:
@@ -1537,7 +1386,7 @@ class DocumentSerializers(serializers.Serializer):
                     DocumentSerializers.Operate(
                         data={"knowledge_id": knowledge_id, "document_id": document_id}
                     ).refresh(state_list)
-                except AlreadyQueued as e:
+                except AlreadyQueued:
                     pass
 
         def batch_tokenize(self, instance: Dict, with_valid=True):
@@ -1551,7 +1400,7 @@ class DocumentSerializers(serializers.Serializer):
                     DocumentSerializers.Operate(
                         data={"knowledge_id": knowledge_id, "document_id": document_id}
                     ).tokenize(state_list)
-                except AlreadyQueued as e:
+                except AlreadyQueued:
                     pass
 
         def batch_add_tag(self, instance: Dict, with_valid=True):
@@ -1689,7 +1538,7 @@ class DocumentSerializers(serializers.Serializer):
                     generate_related_by_document_id.delay(
                         document_id, model_id, model_params_setting, prompt, state_list
                     )
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 pass
 
     class Tags(serializers.Serializer):

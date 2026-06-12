@@ -2,7 +2,7 @@
 """
     @project: MaxKB
     @Author：虎虎
-    @file： KnowledgeVersionSerializer.py
+    @file： tool_version.py
     @date：2025/11/28 18:00
     @desc:
 """

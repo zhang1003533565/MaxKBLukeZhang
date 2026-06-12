@@ -219,26 +219,6 @@ const putToolWorkflow: (
 }
 
 /**
- * 导出知识库工作流
- * @param knowledge_id
- * @param knowledge_name
- * @param loading
- * @returns
- */
-const exportKnowledgeWorkflow = (
-  knowledge_id: string,
-  knowledge_name: string,
-  loading?: Ref<boolean>,
-) => {
-  return exportFile(
-    knowledge_name + '.kbwf',
-    `${prefix.value}/${knowledge_id}/workflow/export`,
-    undefined,
-    loading,
-  )
-}
-
-/**
  * 导入工具工作流
  */
 const importToolWorkflow: (

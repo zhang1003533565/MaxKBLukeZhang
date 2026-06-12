@@ -1,6 +1,5 @@
 import { hasPermission } from '@/utils/permission/index'
-import { ComplexPermission } from '@/utils/permission/type'
-import { EditionConst, PermissionConst, RoleConst } from '@/utils/permission/data'
+import { PermissionConst, RoleConst } from '@/utils/permission/data'
 const share = {
   is_share: () => false,
   create: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_CREATE], 'OR'),
@@ -10,7 +9,6 @@ const share = {
   vector: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_VECTOR], 'OR'),
   generate: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_GENERATE], 'OR'),
   edit: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_EDIT], 'OR'),
-  publish: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_PUBLISH], 'OR'),
   export: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_EXPORT], 'OR'),
   delete: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_DELETE], 'OR'),
 
@@ -20,7 +18,6 @@ const share = {
       [
         RoleConst.ADMIN,
         PermissionConst.SHARED_KNOWLEDGE_DOCUMENT_READ,
-        PermissionConst.SHARED_KNOWLEDGE_WORKFLOW_READ,
       ],
       'OR',
     ),
@@ -76,12 +73,6 @@ const share = {
   tag_edit: () => hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_TAG_EDIT], 'OR'),
   tag_delete: () =>
     hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_TAG_DELETE], 'OR'),
-  debug: () =>
-    hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_WORKFLOW_READ], 'OR'),
-  workflow_edit: () =>
-    hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_WORKFLOW_EDIT], 'OR'),
-  workflow_export: () =>
-    hasPermission([RoleConst.ADMIN, PermissionConst.SHARED_KNOWLEDGE_WORKFLOW_EXPORT], 'OR'),
   chat_user_edit: () => false,
 
   auth: () => false,

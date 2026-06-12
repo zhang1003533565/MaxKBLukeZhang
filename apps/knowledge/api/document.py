@@ -4,7 +4,7 @@ from drf_spectacular.utils import OpenApiParameter
 from common.mixins.api_mixin import APIMixin
 from common.result import DefaultResultSerializer
 from knowledge.serializers.common import BatchSerializer
-from knowledge.serializers.document import DocumentInstanceSerializer, DocumentWebInstanceSerializer, \
+from knowledge.serializers.document import DocumentInstanceSerializer, \
     CancelInstanceSerializer, BatchCancelInstanceSerializer, DocumentRefreshSerializer, BatchEditHitHandlingSerializer, \
     DocumentBatchRefreshSerializer, DocumentBatchGenerateRelatedSerializer, DocumentMigrateSerializer
 
@@ -222,12 +222,6 @@ class QaDocumentCreateAPI(TableDocumentCreateAPI):
     pass
 
 
-class WebDocumentCreateAPI(APIMixin):
-    @staticmethod
-    def get_request():
-        return DocumentWebInstanceSerializer
-
-
 class CancelTaskAPI(DocumentReadAPI):
     @staticmethod
     def get_request():
@@ -238,10 +232,6 @@ class BatchCancelTaskAPI(DocumentReadAPI):
     @staticmethod
     def get_request():
         return BatchCancelInstanceSerializer
-
-
-class SyncWebAPI(DocumentReadAPI):
-    pass
 
 
 class RefreshAPI(DocumentReadAPI):

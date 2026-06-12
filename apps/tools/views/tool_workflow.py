@@ -11,7 +11,6 @@ from common.auth.authentication import has_permissions
 from common.constants.permission_constants import PermissionConstants, RoleConstants, ViewPermission, CompareConstants
 from common.log.log import log
 from common.result import result, DefaultResultSerializer
-from knowledge.api.knowledge_workflow import KnowledgeWorkflowApi
 from tools.api.tool import GetInternalToolAPI
 from tools.api.tool_workflow import ToolWorkflowApi
 from tools.serializers.tool_workflow import ToolWorkflowSerializer, ToolWorkflowMcpSerializer, StoreToolWorkflow
@@ -85,8 +84,8 @@ class ToolWorkflowView(APIView):
             description=_('Get tool workflow'),
             summary=_('Get tool workflow'),
             operation_id=_('Get tool workflow'),  # type: ignore
-            parameters=KnowledgeWorkflowApi.get_parameters(),
-            responses=KnowledgeWorkflowApi.get_response(),
+            parameters=ToolWorkflowApi.get_parameters(),
+            responses=ToolWorkflowApi.get_response(),
             tags=[_('Tool')]  # type: ignore
         )
         @has_permissions(

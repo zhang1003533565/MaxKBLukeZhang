@@ -230,21 +230,6 @@ const workspace = {
       ],
       'OR',
     ),
-  publish: (source_id: string) =>
-    hasPermission(
-      [
-        new ComplexPermission(
-          [RoleConst.USER],
-          [PermissionConst.KNOWLEDGE.getKnowledgeWorkspaceResourcePermission(source_id)],
-          [],
-          'AND',
-        ),
-        RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
-        PermissionConst.KNOWLEDGE_PUBLISH.getKnowledgeWorkspaceResourcePermission(source_id),
-        PermissionConst.KNOWLEDGE_PUBLISH.getWorkspacePermissionWorkspaceManageRole,
-      ],
-      'OR',
-    ),
   delete: (source_id: string) =>
     hasPermission(
       [
@@ -272,9 +257,7 @@ const workspace = {
         ),
         RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
         PermissionConst.KNOWLEDGE_DOCUMENT_READ.getKnowledgeWorkspaceResourcePermission(source_id),
-        PermissionConst.KNOWLEDGE_WORKFLOW_READ.getKnowledgeWorkspaceResourcePermission(source_id),
         PermissionConst.KNOWLEDGE_DOCUMENT_READ.getWorkspacePermissionWorkspaceManageRole,
-        PermissionConst.KNOWLEDGE_WORKFLOW_READ.getWorkspacePermissionWorkspaceManageRole,
       ],
       'OR',
     ),
@@ -683,53 +666,6 @@ const workspace = {
         RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
         PermissionConst.KNOWLEDGE_CHAT_USER_EDIT.getKnowledgeWorkspaceResourcePermission(source_id),
         PermissionConst.KNOWLEDGE_CHAT_USER_EDIT.getWorkspacePermissionWorkspaceManageRole,
-      ],
-      'OR',
-    ),
-  debug: (source_id: string) =>
-    hasPermission(
-      [
-        new ComplexPermission(
-          [RoleConst.USER],
-          [PermissionConst.KNOWLEDGE.getKnowledgeWorkspaceResourcePermission(source_id)],
-          [],
-          'AND',
-        ),
-        RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
-        PermissionConst.KNOWLEDGE_WORKFLOW_READ.getKnowledgeWorkspaceResourcePermission(source_id),
-        PermissionConst.KNOWLEDGE_WORKFLOW_READ.getWorkspacePermissionWorkspaceManageRole,
-      ],
-      'OR',
-    ),
-  workflow_edit: (source_id: string) =>
-    hasPermission(
-      [
-        new ComplexPermission(
-          [RoleConst.USER],
-          [PermissionConst.KNOWLEDGE.getKnowledgeWorkspaceResourcePermission(source_id)],
-          [],
-          'AND',
-        ),
-        RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
-        PermissionConst.KNOWLEDGE_WORKFLOW_EDIT.getKnowledgeWorkspaceResourcePermission(source_id),
-        PermissionConst.KNOWLEDGE_WORKFLOW_EDIT.getWorkspacePermissionWorkspaceManageRole,
-      ],
-      'OR',
-    ),
-  workflow_export: (source_id: string) =>
-    hasPermission(
-      [
-        new ComplexPermission(
-          [RoleConst.USER],
-          [PermissionConst.KNOWLEDGE.getKnowledgeWorkspaceResourcePermission(source_id)],
-          [],
-          'AND',
-        ),
-        RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
-        PermissionConst.KNOWLEDGE_WORKFLOW_EXPORT.getKnowledgeWorkspaceResourcePermission(
-          source_id,
-        ),
-        PermissionConst.KNOWLEDGE_WORKFLOW_EXPORT.getWorkspacePermissionWorkspaceManageRole,
       ],
       'OR',
     ),

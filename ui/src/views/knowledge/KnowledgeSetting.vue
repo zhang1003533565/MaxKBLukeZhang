@@ -11,7 +11,7 @@
             <BaseForm ref="BaseFormRef" :data="detail" :apiType="apiType" />
 
             <el-form
-              ref="webFormRef"
+              ref="formRef"
               :rules="rules"
               :model="form"
               label-position="top"
@@ -32,24 +32,6 @@
                       <div>{{ $t('views.knowledge.knowledgeType.generalKnowledge') }}</div>
                       <el-text type="info"
                         >{{ $t('views.knowledge.knowledgeType.generalInfo') }}
-                      </el-text>
-                    </div>
-                  </div>
-                </el-card>
-                <el-card
-                  shadow="never"
-                  class="mb-8 w-full layout-bg"
-                  style="line-height: 22px"
-                  v-if="detail?.type === 1"
-                >
-                  <div class="flex align-center">
-                    <el-avatar class="mr-8 avatar-purple" shape="square" :size="32">
-                      <img src="@/assets/knowledge/icon_web.svg" style="width: 58%" alt="" />
-                    </el-avatar>
-                    <div>
-                      <div>{{ $t('views.knowledge.knowledgeType.webKnowledge') }}</div>
-                      <el-text type="info">
-                        {{ $t('views.knowledge.knowledgeType.webInfo') }}
                       </el-text>
                     </div>
                   </div>
@@ -79,49 +61,6 @@
                     </div>
                   </div>
                 </el-card>
-                <el-card
-                  shadow="never"
-                  class="mb-8 w-full layout-bg"
-                  style="line-height: 22px"
-                  v-if="detail?.type === 4"
-                >
-                  <div class="flex align-center">
-                    <el-avatar class="mr-8 avatar-purple" shape="square" :size="32">
-                      <img src="@/assets/workflow/logo_workflow.svg" style="width: 60%" alt="" />
-                    </el-avatar>
-                    <div>
-                      <p>
-                        <el-text>{{
-                          $t('views.knowledge.knowledgeType.workflowKnowledge')
-                        }}</el-text>
-                      </p>
-                      <el-text type="info">
-                        {{ $t('views.knowledge.knowledgeType.workflowInfo') }}
-                      </el-text>
-                    </div>
-                  </div>
-                </el-card>
-              </el-form-item>
-              <el-form-item
-                :label="$t('views.knowledge.form.source_url.label')"
-                prop="source_url"
-                v-if="detail?.type === 1"
-              >
-                <el-input
-                  v-model="form.source_url"
-                  :placeholder="$t('views.knowledge.form.source_url.placeholder')"
-                  @blur="form.source_url = form.source_url.trim()"
-                />
-              </el-form-item>
-              <el-form-item
-                :label="$t('views.knowledge.form.selector.label')"
-                v-if="detail?.type === 1"
-              >
-                <el-input
-                  v-model="form.selector"
-                  :placeholder="$t('views.knowledge.form.selector.placeholder')"
-                  @blur="form.selector = form.selector.trim()"
-                />
               </el-form-item>
               <el-form-item label="App ID" prop="app_id" v-if="detail?.type === 2">
                 <el-input
@@ -238,15 +177,13 @@ const isShared = computed(() => {
   return folderId === 'share'
 })
 
-const webFormRef = ref()
+const formRef = ref()
 const BaseFormRef = ref()
 const loading = ref(false)
 const detail = ref<any>({})
 const cloneModelId = ref('')
 
 const form = ref<any>({
-  source_url: '',
-  selector: '',
   app_id: '',
   app_secret: '',
   folder_token: '',
@@ -255,13 +192,6 @@ const form = ref<any>({
 })
 
 const rules = reactive({
-  source_url: [
-    {
-      required: true,
-      message: t('views.knowledge.form.source_url.requiredMessage'),
-      trigger: 'blur',
-    },
-  ],
   app_id: [
     {
       required: true,
@@ -287,10 +217,10 @@ const rules = reactive({
 
 async function submit() {
   if (await BaseFormRef.value?.validate()) {
-    await webFormRef.value.validate((valid: any) => {
+    await formRef.value.validate((valid: any) => {
       if (valid) {
         const obj =
-          detail.value.type === 1 || detail.value.type === 2
+          detail.value.type === 2
             ? {
                 meta: form.value,
                 file_count_limit: form.value.file_count_limit,
@@ -361,7 +291,7 @@ function getDetail() {
         form.value.file_count_limit = res.data.file_count_limit
         form.value.file_size_limit = res.data.file_size_limit
       }
-      if (detail.value?.type === 1 || detail.value?.type === 2) {
+      if (detail.value?.type === 2) {
         form.value = res.data.meta
       }
     })

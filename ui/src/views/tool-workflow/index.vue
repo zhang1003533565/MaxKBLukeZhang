@@ -1,5 +1,5 @@
 <template>
-  <div class="knowledge-workflow" v-loading="loading">
+  <div class="tool-workflow" v-loading="loading">
     <div class="header border-b flex-between p-12-24 white-bg">
       <div class="flex align-center">
         <back-button @click="back"></back-button>
@@ -375,40 +375,6 @@ const publish = () => {
     })
 }
 
-const elUploadRef = ref()
-const importKnowledgeWorkflow = (file: any) => {
-  const formData = new FormData()
-  formData.append('file', file.raw)
-  const name = file.name.replace('.kbwf', '')
-  elUploadRef.value.clearFiles()
-  MsgConfirm(
-    t('common.tip'),
-    `${t('views.application.tip.confirmUse')} ${name} ${t('views.application.tip.overwrite')}?`,
-    {
-      confirmButtonText: t('common.confirm'),
-      cancelButtonText: t('common.cancel'),
-    },
-  )
-    .then(() => {
-      loadSharedApi({ type: 'knowledge', isShared: isShared.value, systemType: apiType.value })
-        .importKnowledgeWorkflow(id, formData, loading)
-        .then(() => {
-          getDetail()
-        })
-        .catch((error: any) => {
-          if (error.code === 400) {
-            MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-              cancelButtonText: t('common.confirm'),
-              confirmButtonText: t('common.professional'),
-            }).then(() => {
-              window.open('https://maxkb.cn/pricing.html', '_blank')
-            })
-          }
-        })
-    })
-    .catch(() => {})
-}
-
 function exportToolWorkflow(name: string, id: string) {
   loadSharedApi({ type: 'tool', isShared: isShared.value, systemType: apiType.value })
     .exportTool(id, name, loading)
@@ -557,7 +523,7 @@ onBeforeUnmount(() => {
 })
 </script>
 <style lang="scss">
-.knowledge-workflow {
+.tool-workflow {
   background: var(--app-layout-bg-color);
   height: 100%;
 

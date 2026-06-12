@@ -7,7 +7,6 @@
     @desc:
 """
 import time
-import uuid
 from typing import Dict, List
 
 from django.utils.translation import gettext as _
@@ -56,7 +55,7 @@ def write_context_stream(node_variable: Dict, workflow_variable: Dict, node: INo
         answer += content_chunk
         yield {'content': content_chunk,
                'reasoning_content': reasoning_content_chunk}
-    runtime_details = workflow_manage.get_runtime_details()
+    workflow_manage.get_runtime_details()
     _write_context(node_variable, workflow_variable, node, workflow, answer, reasoning_content)
 
 
@@ -268,18 +267,15 @@ class BaseLoopNode(ILoopNode):
 
     def execute(self, loop_type, array, number, loop_body, **kwargs) -> NodeResult:
         from application.flow.loop_workflow_manage import LoopWorkflowManage, Workflow
-        from application.flow.knowledge_loop_workflow_manage import KnowledgeLoopWorkflowManage
         from application.flow.tool_loop_workflow_manage import ToolLoopWorkflowManage
         self.node_params['is_result'] = True
 
         def workflow_manage_new_instance(loop_data, global_data, start_node_id=None,
                                          start_node_data=None, chat_record=None, child_node=None):
             workflow_mode = {WorkflowMode.APPLICATION: WorkflowMode.APPLICATION_LOOP,
-                             WorkflowMode.KNOWLEDGE: WorkflowMode.KNOWLEDGE_LOOP,
                              WorkflowMode.TOOL: WorkflowMode.TOOL_LOOP}.get(
                 self.workflow_manage.flow.workflow_mode) or WorkflowMode.APPLICATION
             c = {WorkflowMode.APPLICATION_LOOP: LoopWorkflowManage,
-                 WorkflowMode.KNOWLEDGE_LOOP: KnowledgeLoopWorkflowManage,
                  WorkflowMode.TOOL_LOOP: ToolLoopWorkflowManage}.get(workflow_mode) or LoopWorkflowManage
             workflow_manage = c(Workflow.new_instance(loop_body, workflow_mode),
                                 self.workflow_manage.params,

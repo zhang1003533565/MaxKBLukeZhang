@@ -385,8 +385,6 @@ function _getTools(mcp_servers: any) {
   const resourceDict = {
     [WorkflowMode.Application]: 'application',
     [WorkflowMode.ApplicationLoop]: 'application',
-    [WorkflowMode.Knowledge]: 'knowledge',
-    [WorkflowMode.KnowledgeLoop]: 'knowledge',
     [WorkflowMode.Tool]: 'tool',
     [WorkflowMode.ToolLoop]: 'tool',
   }
