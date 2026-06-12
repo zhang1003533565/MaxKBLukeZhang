@@ -235,7 +235,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { nextTick, ref, onMounted, computed } from 'vue'
+import { nextTick, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import useStore from '@/stores'
 import { cloneDeep } from 'lodash'
@@ -270,7 +270,6 @@ const formInline = ref({
   search_mode: 'embedding',
 })
 
-// 第一次加载
 const first = ref(true)
 
 const cloneForm = ref<any>({})
@@ -305,13 +304,11 @@ function editParagraph(row: any) {
 
 function sendChatHandle(event: any) {
   if (!event?.ctrlKey && !event?.shiftKey && !event?.altKey && !event?.metaKey) {
-    // 如果没有按下组合键，则会阻止默认事件
     event.preventDefault()
     if (!isDisabledChart.value && !loading.value) {
       getHitTestList()
     }
   } else {
-    // 如果同时按下ctrl/shift/cmd/opt +enter，则会换行
     insertNewlineAtCursor(event)
   }
 }
@@ -321,12 +318,10 @@ const insertNewlineAtCursor = (event?: any) => {
   ) as HTMLTextAreaElement
   const startPos = textarea.selectionStart
   const endPos = textarea.selectionEnd
-  // 阻止默认行为（避免额外的换行符）
   event.preventDefault()
-  // 在光标处插入换行符
   inputValue.value = inputValue.value.slice(0, startPos) + '\n' + inputValue.value.slice(endPos)
   nextTick(() => {
-    textarea.setSelectionRange(startPos + 1, startPos + 1) // 光标定位到换行后位置
+    textarea.setSelectionRange(startPos + 1, startPos + 1)
   })
 }
 
@@ -355,8 +350,6 @@ function refresh(data: any) {
     getHitTestList()
   }
 }
-
-onMounted(() => {})
 </script>
 <style lang="scss" scoped>
 .hit-test {

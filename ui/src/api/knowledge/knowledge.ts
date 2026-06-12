@@ -167,6 +167,17 @@ const putKnowledgeHitTest: (
 }
 
 /**
+ * 多知识库命中测试
+ * @query { knowledge_id_list: string[], query_text: string, top_number: number, similarity: number }
+ */
+const putKnowledgeBatchHitTest: (
+  data: any,
+  loading?: Ref<boolean>,
+) => Promise<Result<Array<any>>> = (data, loading) => {
+  return post(`${prefix.value}/hit_test`, data, undefined, loading)
+}
+
+/**
  * 创建知识库
  * @param 参数
  * {
@@ -343,6 +354,7 @@ export default {
   exportZipKnowledge,
   putGenerateRelated,
   putKnowledgeHitTest,
+  putKnowledgeBatchHitTest,
   postKnowledge,
   getKnowledgeModel,
   postLarkKnowledge,

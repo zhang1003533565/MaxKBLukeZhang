@@ -84,6 +84,11 @@ class AliyunBaiLianEmbedding(MaxKBBaseModel):
             params.pop("enable_fusion", None)
         return params
 
+    def _text_optional_params(self):
+        params = dict(self.optional_params)
+        params.pop("enable_fusion", None)
+        return params
+
     def embed_documents(
             self, texts: List[Any], chunk_size: int | None = None
     ) -> List[List[float]]:
@@ -104,10 +109,11 @@ class AliyunBaiLianEmbedding(MaxKBBaseModel):
             else:
                 raise Exception(f'MultiModalEmbedding call failed: status={resp.status_code}, message={resp.message}')
 
-        if len(self.optional_params) > 0:
+        text_optional_params = self._text_optional_params()
+        if len(text_optional_params) > 0:
             res = self.client.create(
                 input=texts, model=self.model_name, encoding_format="float",
-                **self.optional_params
+                **text_optional_params
             )
         else:
             res = self.client.create(input=texts, model=self.model_name, encoding_format="float")

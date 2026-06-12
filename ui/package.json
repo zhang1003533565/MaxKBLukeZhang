@@ -5,12 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "chat": "vite --mode chat",
     "build": "run-p type-check \"build-only {@}\" --",
-    "build-chat": "run-p type-check \"build-only-chat {@}\" --",
     "preview": "vite preview",
     "build-only": "vite build",
-    "build-only-chat": "vite build --mode chat",
     "type-check": "vue-tsc --build",
     "lint": "eslint . --fix",
     "format": "prettier --write src/"

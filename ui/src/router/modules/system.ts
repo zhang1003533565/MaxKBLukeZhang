@@ -81,19 +81,7 @@ const systemRouter = {
         permission: [
           new ComplexPermission(
             [RoleConst.ADMIN],
-            [PermissionConst.RESOURCE_APPLICATION_READ],
-            [EditionConst.IS_EE],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.ADMIN],
             [PermissionConst.RESOURCE_KNOWLEDGE_READ],
-            [EditionConst.IS_EE],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.ADMIN],
-            [PermissionConst.RESOURCE_TOOL_READ],
             [EditionConst.IS_EE],
             'OR',
           ),
@@ -106,27 +94,6 @@ const systemRouter = {
         ],
       },
       children: [
-        {
-          path: '/system/resource-management/application',
-          name: 'ApplicationResourceIndex',
-          meta: {
-            title: 'views.application.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            sameRoute: 'workspace',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN],
-                [PermissionConst.RESOURCE_APPLICATION_READ],
-                [EditionConst.IS_EE],
-                'OR',
-              ),
-            ],
-          },
-          component: () =>
-            import('@/views/system-resource-management/ApplicationResourceIndex.vue'),
-        },
         {
           path: '/system/resource-management/knowledge',
           name: 'KnowledgeResourceIndex',
@@ -146,26 +113,6 @@ const systemRouter = {
             ],
           },
           component: () => import('@/views/system-resource-management/KnowledgeResourceIndex.vue'),
-        },
-        {
-          path: '/system/resource-management/tool',
-          name: 'ToolResourceIndex',
-          meta: {
-            title: 'views.tool.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            sameRoute: 'workspace',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN],
-                [PermissionConst.RESOURCE_TOOL_READ],
-                [EditionConst.IS_EE],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system-resource-management/ToolResourceIndex.vue'),
         },
         {
           path: '/system/resource-management/model',
@@ -203,29 +150,9 @@ const systemRouter = {
           new ComplexPermission(
             [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
             [
-              PermissionConst.APPLICATION_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
-              PermissionConst.APPLICATION_WORKSPACE_USER_RESOURCE_PERMISSION_READ
-                .getWorkspacePermissionWorkspaceManageRole,
-            ],
-            [],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
-            [
               PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
               PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ
-                .getWorkspacePermissionWorkspaceManageRole,
-            ],
-            [],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
-            [
-              PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
-              PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ
-                .getWorkspacePermissionWorkspaceManageRole,
+              .getWorkspacePermissionWorkspaceManageRole,
             ],
             [],
             'OR',
@@ -245,31 +172,6 @@ const systemRouter = {
 
       children: [
         {
-          path: '/system/authorization/application',
-          name: 'authorizationApplication',
-          meta: {
-            title: 'views.application.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            resource: 'APPLICATION',
-            sameRoute: 'authorization',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
-                [
-                  PermissionConst.APPLICATION_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
-                  PermissionConst.APPLICATION_WORKSPACE_USER_RESOURCE_PERMISSION_READ
-                    .getWorkspacePermissionWorkspaceManageRole,
-                ],
-                [],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system/resource-authorization/index.vue'),
-        },
-        {
           path: '/system/authorization/knowledge',
           name: 'authorizationKnowledge',
           meta: {
@@ -285,31 +187,6 @@ const systemRouter = {
                 [
                   PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
                   PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ
-                    .getWorkspacePermissionWorkspaceManageRole,
-                ],
-                [],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system/resource-authorization/index.vue'),
-        },
-        {
-          path: '/system/authorization/tool',
-          name: 'authorizationTool',
-          meta: {
-            title: 'views.tool.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            resource: 'TOOL',
-            sameRoute: 'authorization',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
-                [
-                  PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
-                  PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ
                     .getWorkspacePermissionWorkspaceManageRole,
                 ],
                 [],
@@ -365,12 +242,6 @@ const systemRouter = {
           ),
           new ComplexPermission(
                 [RoleConst.ADMIN],
-                [PermissionConst.SHARED_TOOL_READ],
-                [EditionConst.IS_EE],
-                'OR',
-              ),
-          new ComplexPermission(
-                [RoleConst.ADMIN],
                 [PermissionConst.SHARED_MODEL_READ],
                 [EditionConst.IS_EE],
                 'OR',
@@ -398,25 +269,6 @@ const systemRouter = {
           component: () => import('@/views/system-shared/KnowLedgeSharedIndex.vue'),
         },
         {
-          path: '/system/shared/tool',
-          name: 'tools',
-          meta: {
-            title: 'views.tool.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN],
-                [PermissionConst.SHARED_TOOL_READ],
-                [EditionConst.IS_EE],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system-shared/ToolSharedIndex.vue'),
-        },
-        {
           path: '/system/shared/model',
           name: 'models',
           meta: {
@@ -434,100 +286,6 @@ const systemRouter = {
             ],
           },
           component: () => import('@/views/system-shared/ModelSharedIndex.vue'),
-        },
-      ],
-    },
-    {
-      path: '/system/chat',
-      name: 'SystemChat',
-      meta: {
-        icon: 'app-user-chat',
-        iconActive: 'app-user-chat',
-        title: 'views.chatUser.title',
-        activeMenu: '/system',
-        parentPath: '/system',
-        parentName: 'system',
-        permission: [
-          new ComplexPermission(
-            [RoleConst.WORKSPACE_MANAGE, RoleConst.ADMIN],
-            [PermissionConst.WORKSPACE_CHAT_USER_READ, PermissionConst.CHAT_USER_READ],
-            [EditionConst.IS_EE, EditionConst.IS_PE],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.WORKSPACE_MANAGE, RoleConst.ADMIN],
-            [PermissionConst.WORKSPACE_USER_GROUP_READ, PermissionConst.USER_GROUP_READ],
-            [EditionConst.IS_EE, EditionConst.IS_PE],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.WORKSPACE_MANAGE, RoleConst.ADMIN],
-            [PermissionConst.CHAT_USER_AUTH_READ],
-            [EditionConst.IS_EE, EditionConst.IS_PE],
-            'OR',
-          ),
-        ],
-      },
-      children: [
-        {
-          path: '/system/chat/chat-user',
-          name: 'ChatUser',
-          meta: {
-            title: 'views.chatUser.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            sameRoute: 'SystemChat',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.WORKSPACE_MANAGE, RoleConst.ADMIN],
-                [PermissionConst.CHAT_USER_READ, PermissionConst.WORKSPACE_CHAT_USER_READ],
-                [EditionConst.IS_EE, EditionConst.IS_PE],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system-chat-user/chat-user/index.vue'),
-        },
-        {
-          path: '/system/chat/group',
-          name: 'Group',
-          meta: {
-            title: 'views.chatUser.group.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            sameRoute: 'SystemChat',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.WORKSPACE_MANAGE, RoleConst.ADMIN],
-                [PermissionConst.WORKSPACE_USER_GROUP_READ, PermissionConst.USER_GROUP_READ],
-                [EditionConst.IS_EE, EditionConst.IS_PE],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system-chat-user/group/index.vue'),
-        },
-        {
-          path: '/system/chat/authentication',
-          name: 'Authentication',
-          meta: {
-            title: 'views.system.authentication.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            sameRoute: 'SystemChat',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN],
-                [PermissionConst.CHAT_USER_AUTH_READ],
-                [EditionConst.IS_EE, EditionConst.IS_PE],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system-chat-user/authentication/index.vue'),
         },
       ],
     },

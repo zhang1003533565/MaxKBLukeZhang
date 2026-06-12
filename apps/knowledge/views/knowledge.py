@@ -10,7 +10,7 @@ from common.constants.permission_constants import PermissionConstants, RoleConst
 from common.log.log import log
 from common import result
 from knowledge.api.knowledge import KnowledgeBaseCreateAPI, KnowledgeTreeReadAPI, \
-    KnowledgeEditAPI, KnowledgeReadAPI, KnowledgePageAPI, GenerateRelatedAPI, HitTestAPI, EmbeddingAPI, \
+    BatchHitTestAPI, KnowledgeEditAPI, KnowledgeReadAPI, KnowledgePageAPI, GenerateRelatedAPI, HitTestAPI, EmbeddingAPI, \
     GetModelAPI, KnowledgeExportAPI, KnowledgeBatchOperateAPI, KnowledgeImportAPI
 from knowledge.models import KnowledgeScope
 from knowledge.serializers.common import get_knowledge_operation_object
@@ -265,6 +265,54 @@ class KnowledgeView(APIView):
                 data={
                     'workspace_id': workspace_id,
                     'knowledge_id': knowledge_id,
+                    'user_id': request.user.id,
+                    "query_text": request.data.get("query_text"),
+                    "top_number": request.data.get("top_number"),
+                    'similarity': request.data.get('similarity'),
+                    'search_mode': request.data.get('search_mode')
+                }
+            ).hit_test())
+
+    class BatchHitTest(APIView):
+        authentication_classes = [TokenAuth]
+
+        @extend_schema(
+            methods=['POST'],
+            summary=_('Hit test list'),
+            description=_('Hit test list'),
+            operation_id=_('Batch hit test list'),  # type: ignore
+            parameters=BatchHitTestAPI.get_parameters(),
+            request=BatchHitTestAPI.get_request(),
+            responses=BatchHitTestAPI.get_response(),
+            tags=[_('Knowledge Base')]  # type: ignore
+        )
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_permission(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            RoleConstants.USER.get_workspace_role()
+        )
+        def post(self, request: Request, workspace_id: str):
+            knowledge_id_list = request.data.get('knowledge_id_list', [])
+            permitted_ids = check_batch_permissions(
+                request,
+                knowledge_id_list,
+                'knowledge_id',
+                (
+                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_knowledge_permission(),
+                    PermissionConstants.KNOWLEDGE_HIT_TEST.get_workspace_permission_workspace_manage_role(),
+                    ViewPermission(
+                        [RoleConstants.USER.get_workspace_role()],
+                        [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                        CompareConstants.AND
+                    ),
+                    RoleConstants.WORKSPACE_MANAGE.get_workspace_role()
+                ),
+                workspace_id=workspace_id
+            )
+            return result.success(KnowledgeSerializer.BatchHitTest(
+                data={
+                    'workspace_id': workspace_id,
+                    'knowledge_id_list': permitted_ids,
                     'user_id': request.user.id,
                     "query_text": request.data.get("query_text"),
                     "top_number": request.data.get("top_number"),

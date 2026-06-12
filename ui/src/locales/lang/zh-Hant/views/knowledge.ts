@@ -103,6 +103,17 @@ export default {
     tip: '注意：轉換後不可撤回。',
     comfirm: '確定轉換為工作流知識庫？轉換後無法回退，請謹慎操作。',
   },
+  chatTest: {
+    title: '聊天測試',
+    knowledge: '知識庫',
+    knowledgePlaceholder: '請選擇知識庫',
+    knowledgeRequired: '請至少選擇一個知識庫',
+    inputPlaceholder: '輸入問題，測試知識庫回饋',
+    greeting: '可以開始提問。',
+    noReference: '沒有找到相關內容。',
+    referenceSummary: '找到 {count} 條相關內容。',
+    clear: '清空對話',
+  },
   customSegmentation: {
     title: '自定義分詞',
     tip: '避免專業術語被拆分，提升全文檢索的精准度與召回率',

@@ -19,6 +19,7 @@ export default {
   modifySuccess: 'Successful',
   cancel: 'Cancel',
   confirm: 'OK',
+  send: 'Send',
   close: 'Close',
   tip: 'Tips',
   add: 'Add',

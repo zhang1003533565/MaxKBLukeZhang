@@ -22,6 +22,7 @@ export default {
   addSuccess: '添加成功',
   cancel: '取消',
   confirm: '确定',
+  send: '发送',
   close: '关闭',
   tip: '提示',
   refresh: '刷新',

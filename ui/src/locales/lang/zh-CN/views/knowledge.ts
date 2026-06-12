@@ -113,6 +113,17 @@ export default {
     tip: '注意：转换后不可撤回。',
     comfirm: '确定转换为工作流知识库？转换后无法回退，请谨慎操作。',
   },
+  chatTest: {
+    title: '聊天测试',
+    knowledge: '知识库',
+    knowledgePlaceholder: '请选择知识库',
+    knowledgeRequired: '请至少选择一个知识库',
+    inputPlaceholder: '输入问题，测试知识库反馈',
+    greeting: '可以开始提问。',
+    noReference: '没有找到相关内容。',
+    referenceSummary: '找到 {count} 条相关内容。',
+    clear: '清空对话',
+  },
   customSegmentation: {
     title: '自定义分词',
     tip: '避免专业术语被拆分，提升全文检索的精准度与召回率',

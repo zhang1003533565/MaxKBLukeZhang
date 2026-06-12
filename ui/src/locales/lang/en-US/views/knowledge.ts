@@ -111,6 +111,17 @@ export default {
     confirm:
       'Are you sure you want to convert to the workflow knowledge base? This action cannot be undone. Please proceed with caution.',
   },
+  chatTest: {
+    title: 'Chat Test',
+    knowledge: 'Knowledge',
+    knowledgePlaceholder: 'Select knowledge',
+    knowledgeRequired: 'Please select at least one knowledge',
+    inputPlaceholder: 'Ask a question to test knowledge feedback',
+    greeting: 'Ready for questions.',
+    noReference: 'No related content found.',
+    referenceSummary: '{count} related references found.',
+    clear: 'Clear chat',
+  },
   customSegmentation: {
     title: 'Custom Term',
     tip: 'Avoid professional terms from being split, improve the accuracy and recall rate of full-text search',

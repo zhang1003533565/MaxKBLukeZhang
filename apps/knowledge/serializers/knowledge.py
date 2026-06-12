@@ -64,6 +64,7 @@ from knowledge.serializers.common import (
     ProblemParagraphObject,
     drop_knowledge_index,
     get_embedding_model_by_knowledge_id,
+    get_embedding_model_by_knowledge_id_list,
     get_embedding_model_id_by_knowledge_id,
     list_paragraph,
     update_resource_mapping_by_knowledge,
@@ -146,6 +147,15 @@ class HitTestSerializer(serializers.Serializer):
                 code=500,
             )
         ],
+    )
+
+
+class BatchHitTestSerializer(HitTestSerializer):
+    knowledge_id_list = serializers.ListField(
+        required=True,
+        allow_empty=False,
+        child=serializers.UUIDField(required=True, label=_("knowledge id")),
+        label=_("knowledge id list"),
     )
 
 
@@ -1180,6 +1190,73 @@ class KnowledgeSerializer(serializers.Serializer):
                 self.data.get("top_number"),
                 self.data.get("similarity"),
                 SearchMode(self.data.get("search_mode")),
+                model,
+            )
+            hit_dict = reduce(lambda x, y: {**x, **y}, [{hit.get("paragraph_id"): hit} for hit in hit_list], {})
+            p_list = list_paragraph([h.get("paragraph_id") for h in hit_list])
+            return [
+                {
+                    **p,
+                    "similarity": hit_dict.get(p.get("id")).get("similarity"),
+                    "comprehensive_score": hit_dict.get(p.get("id")).get("comprehensive_score"),
+                }
+                for p in p_list
+            ]
+
+    class BatchHitTest(serializers.Serializer):
+        workspace_id = serializers.CharField(required=True, label=_("workspace id"))
+        knowledge_id_list = serializers.ListField(
+            required=True,
+            allow_empty=False,
+            child=serializers.UUIDField(required=True, label=_("knowledge id")),
+            label=_("knowledge id list"),
+        )
+        user_id = serializers.UUIDField(required=False, label=_("user id"))
+        query_text = serializers.CharField(required=True, label=_("query text"))
+        top_number = serializers.IntegerField(required=True, max_value=10000, min_value=1, label=_("top number"))
+        similarity = serializers.FloatField(required=True, max_value=2, min_value=0, label=_("similarity"))
+        search_mode = serializers.CharField(
+            required=True,
+            label=_("search mode"),
+            validators=[
+                validators.RegexValidator(
+                    regex=re.compile("^embedding|keywords|blend$"),
+                    message=_("The type only supports embedding|keywords|blend"),
+                    code=500,
+                )
+            ],
+        )
+
+        def is_valid(self, *, raise_exception=True):
+            super().is_valid(raise_exception=True)
+            workspace_id = self.validated_data.get("workspace_id")
+            knowledge_id_list = [str(knowledge_id) for knowledge_id in self.validated_data.get("knowledge_id_list")]
+            knowledge_set = QuerySet(Knowledge).filter(id__in=knowledge_id_list)
+            if workspace_id:
+                knowledge_set = knowledge_set.filter(workspace_id=workspace_id)
+            existing_id_set = {str(knowledge.id) for knowledge in knowledge_set}
+            if len(existing_id_set) != len(set(knowledge_id_list)):
+                raise AppApiException(500, _("Knowledge id does not exist"))
+
+        def hit_test(self):
+            self.is_valid()
+            knowledge_id_list = [str(knowledge_id) for knowledge_id in self.validated_data.get("knowledge_id_list")]
+            vector = VectorStore.get_embedding_vector()
+            exclude_document_id_list = [
+                str(document.id)
+                for document in QuerySet(Document).filter(knowledge_id__in=knowledge_id_list, is_active=False)
+            ]
+            try:
+                model = get_embedding_model_by_knowledge_id_list(knowledge_id_list)
+            except Exception as e:
+                raise AppApiException(500, str(e)) from e
+            hit_list = vector.hit_test(
+                self.validated_data.get("query_text"),
+                knowledge_id_list,
+                exclude_document_id_list,
+                self.validated_data.get("top_number"),
+                self.validated_data.get("similarity"),
+                SearchMode(self.validated_data.get("search_mode")),
                 model,
             )
             hit_dict = reduce(lambda x, y: {**x, **y}, [{hit.get("paragraph_id"): hit} for hit in hit_list], {})

@@ -19,6 +19,7 @@ export default {
   modifySuccess: '修改成功',
   cancel: '取消',
   confirm: '確認',
+  send: '傳送',
   close: '關閉',
   tip: '提示',
   add: '新增',

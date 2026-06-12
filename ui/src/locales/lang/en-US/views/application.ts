@@ -257,7 +257,7 @@ After disabling, the long-term memory of the conversation users will be cleared,
     copyUrl: 'Copy the link and fill it in',
   },
   hitTest: {
-    title: 'Retrieval Testing',
+    title: 'Recall Testing',
     text: 'Test the hitting effect of the Knowledge based on the given query text.',
     emptyMessage1: 'Retrieval Testing results will show here',
     emptyMessage2: 'No matching sections found',

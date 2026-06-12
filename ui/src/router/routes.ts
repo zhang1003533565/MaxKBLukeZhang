@@ -1,111 +1,27 @@
 import type { RouteRecordRaw } from 'vue-router'
-import { isKnowledgeOnly } from '@/utils/knowledge-only'
+import knowledgeRoute from './modules/knowledge'
+import knowledgeChatRoute from './modules/knowledge-chat'
+import modelRoute from './modules/model'
+import documentRoute from './modules/document'
+import paragraphRoute from './modules/paragraph'
+import systemRoute from './modules/system'
 
-const modules: any = import.meta.glob('./modules/*.ts', { eager: true })
-
-const knowledgeOnlyModuleNames = new Set(['knowledge.ts', 'model.ts', 'document.ts', 'paragraph.ts', 'system.ts'])
-const knowledgeOnlyRouteNames = new Set([
-  'ApplicationWorkflow',
-  'ToolWorkflow',
-  'Chat',
-  'demo',
-  'UserLogin',
-  'application',
-  'application-index',
-  'ApplicationDetail',
-  'tool',
-  'tool-index',
-  'trigger',
-  'trigger-index',
-  'ApplicationResourceIndex',
-  'ToolResourceIndex',
-  'authorizationApplication',
-  'authorizationTool',
-  'tools',
-  'SystemChat',
-  'ChatUser',
-  'Group',
-  'Authentication',
-])
-
-const knowledgeOnlyPathPrefixes = [
-  '/application',
-  '/tool',
-  '/trigger',
-  '/chat',
-  '/demo',
-  '/user-login',
-  '/system/chat',
-  '/system/resource-management/application',
-  '/system/resource-management/tool',
-  '/system/authorization/application',
-  '/system/authorization/tool',
-  '/system/shared/tool',
+const rolesRoutes: RouteRecordRaw[] = [
+  knowledgeRoute,
+  knowledgeChatRoute,
+  modelRoute,
+  documentRoute,
+  paragraphRoute,
+  systemRoute,
 ]
-
-const isKnowledgeOnlyRoute = (route: RouteRecordRaw) => {
-  const routeName = route.name?.toString()
-  const routePath = route.path
-  return (
-    !routeName ||
-    !knowledgeOnlyRouteNames.has(routeName) &&
-      !knowledgeOnlyPathPrefixes.some((path) => routePath.startsWith(path))
-  )
-}
-
-const filterKnowledgeOnlyRoutes = (routeList: RouteRecordRaw[]): RouteRecordRaw[] =>
-  routeList
-    .filter(isKnowledgeOnlyRoute)
-    .map((route) => {
-      const filteredRoute = { ...route } as RouteRecordRaw
-      if (route.children) {
-        filteredRoute.children = filterKnowledgeOnlyRoutes(route.children)
-      }
-      return filteredRoute
-    })
-
-const moduleKeys = Object.keys(modules).filter((key) => {
-  if (!isKnowledgeOnly) {
-    return true
-  }
-  return knowledgeOnlyModuleNames.has(key.split('/').pop() || '')
-})
-
-const rolesRoutes: RouteRecordRaw[] = [...moduleKeys.map((key) => modules[key].default)]
 
 const baseRoutes: Array<RouteRecordRaw> = [
   {
     path: '/',
     name: 'root',
-    redirect: '/home',
+    redirect: '/knowledge',
     children: [
       ...rolesRoutes,
-      {
-        path: '/home',
-        name: 'home',
-        redirect: '/home',
-        meta: {
-          title: 'home.title',
-          menu: true,
-          order: 1,
-          icon: 'app-home',
-          iconActive: 'app-home-active',
-          group: 'workspace',
-        },
-        children: [
-          {
-            path: '/home',
-            name: 'home-index',
-            meta: {
-              title: 'home.title',
-              activeMenu: '/home',
-              sameRoute: 'home',
-            },
-            component: () => import('@/views/home/index.vue'),
-          },
-        ],
-        component: () => import('@/layout/layout-template/SimpleLayout.vue'),
-      },
       {
         path: '/no-permission',
         name: 'noPermission',
@@ -123,39 +39,6 @@ const baseRoutes: Array<RouteRecordRaw> = [
       },
     ],
   },
-
-  // 高级编排
-  {
-    path: '/application/:from/:id/workflow',
-    name: 'ApplicationWorkflow',
-    meta: { activeMenu: '/application' },
-    component: () => import('@/views/application-workflow/index.vue'),
-  },
-  {
-    path: '/tool/:id/:folderId/workflow',
-    name: 'ToolWorkflow',
-    meta: { activeMenu: '/tool' },
-    component: () => import('@/views/tool-workflow/index.vue'),
-  },
-  // 对话
-  {
-    path: '/chat/:accessToken',
-    name: 'Chat',
-    component: () => import('@/views/chat/index.vue'),
-  },
-  {
-    path: '/demo',
-    name: 'demo',
-    component: () => import('@/views/demo/index.vue'),
-  },
-
-  // 对话用户登录
-  {
-    path: '/user-login/:accessToken',
-    name: 'UserLogin',
-    component: () => import('@/views/chat/user-login/index.vue'),
-  },
-
   {
     path: '/login',
     name: 'login',
@@ -188,6 +71,4 @@ const baseRoutes: Array<RouteRecordRaw> = [
   },
 ]
 
-export const routes: Array<RouteRecordRaw> = isKnowledgeOnly
-  ? filterKnowledgeOnlyRoutes(baseRoutes)
-  : baseRoutes
+export const routes: Array<RouteRecordRaw> = baseRoutes

@@ -1,6 +1,5 @@
 import { get_next_route } from '@/utils/permission'
-import { SourceTypeEnum } from '@/enums/common'
-import { EditionConst, PermissionConst, RoleConst } from '@/utils/permission/data'
+import { PermissionConst, RoleConst } from '@/utils/permission/data'
 import { ComplexPermission } from '@/utils/permission/type'
 /* type 类型
     BASE = 0, '通用类型'
@@ -380,111 +379,6 @@ const DocumentRouter = {
         ],
       },
       component: () => import('@/views/hit-test/index.vue'),
-    },
-    {
-      path: 'chat-user',
-      name: 'KnowledgeChatUser',
-      meta: {
-        icon: 'app-user-chat',
-        iconActive: 'app-user-chat-active',
-        title: 'views.chatUser.title',
-        active: 'chat-user',
-        parentPath: '/knowledge/:id/:folderId/:type',
-        parentName: 'KnowledgeDetail',
-        resourceType: SourceTypeEnum.KNOWLEDGE,
-        group: 'KnowledgeDetail',
-        permission: [
-          new ComplexPermission(
-            [
-              RoleConst.ADMIN,
-              () => {
-                const to: any = get_next_route()
-                if (to.params.folderId == 'shared') {
-                  return RoleConst.ADMIN
-                } else if (to.params.folderId == 'resource-management') {
-                  return RoleConst.ADMIN
-                } else {
-                  return RoleConst.WORKSPACE_MANAGE.getWorkspaceRole()
-                }
-              },
-            ],
-            [
-              () => {
-                const to: any = get_next_route()
-                if (to.params.folderId == 'shared') {
-                  return PermissionConst.SHARED_KNOWLEDGE_CHAT_USER_READ
-                } else if (to.params.folderId == 'resource-management') {
-                  return PermissionConst.RESOURCE_KNOWLEDGE_CHAT_USER_READ
-                } else {
-                  return PermissionConst.KNOWLEDGE_CHAT_USER_READ.getKnowledgeWorkspaceResourcePermission(
-                    to ? to.params.id : '',
-                  )
-                }
-              },
-              () => {
-                const to: any = get_next_route()
-                if (to.params.folder_id == 'shared') {
-                  return PermissionConst.SHARED_KNOWLEDGE_CHAT_USER_READ
-                } else if (to.params.folderId == 'resource-management') {
-                  return PermissionConst.RESOURCE_KNOWLEDGE_CHAT_USER_READ
-                } else {
-                  return PermissionConst.KNOWLEDGE_CHAT_USER_READ.getWorkspacePermissionWorkspaceManageRole()
-                }
-              },
-            ],
-            [EditionConst.IS_EE, EditionConst.IS_PE],
-            'OR',
-          ),
-          () => {
-            const to: any = get_next_route()
-            if (to.params.folderId == 'shared') {
-              return RoleConst.ADMIN
-            } else if (to.params.folderId == 'resource-management') {
-            } else {
-              return new ComplexPermission(
-                [RoleConst.USER],
-                [
-                  PermissionConst.KNOWLEDGE.getKnowledgeWorkspaceResourcePermission(
-                    to ? to.params.id : '',
-                  ),
-                ],
-                [EditionConst.IS_EE, EditionConst.IS_PE],
-                'AND',
-              )
-            }
-          },
-          () => {
-            const to: any = get_next_route()
-            if (to.params.folderId == 'share') {
-              return new ComplexPermission(
-                [RoleConst.EXTENDS_USER.getWorkspaceRole()],
-                [PermissionConst.KNOWLEDGE_CHAT_USER_READ.getWorkspacePermission()],
-                [],
-                'AND',
-              )
-            }
-          },
-          () => {
-            const to: any = get_next_route()
-            if (to.params.folderId == 'share') {
-              return RoleConst.USER.getWorkspaceRole()
-            }
-          },
-          () => {
-            const to: any = get_next_route()
-            if (to.params.folderId == 'resource-management') {
-              return RoleConst.ADMIN
-            }
-          },
-          () => {
-            const to: any = get_next_route()
-            if (to.params.folderId == 'resource-management') {
-              return PermissionConst.RESOURCE_KNOWLEDGE_CHAT_USER_READ
-            }
-          },
-        ],
-      },
-      component: () => import('@/views/chat-user/index.vue'),
     },
     {
       path: 'setting',

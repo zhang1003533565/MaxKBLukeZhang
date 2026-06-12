@@ -20,8 +20,7 @@ const isShared = computed(() => {
     (folderId === 'shared' ||
       from === 'systemShare' ||
       from === 'systemManage' ||
-      route.path.includes('resource-management')) &&
-    route.fullPath != '/home'
+      route.path.includes('resource-management'))
   )
 })
 </script>
