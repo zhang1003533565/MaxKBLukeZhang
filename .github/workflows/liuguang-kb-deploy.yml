@@ -83,7 +83,6 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || '22' }}
-          script_stop: true
           script: |
             set -euo pipefail
             DEPLOY_PATH="${{ vars.SERVER_DEPLOY_PATH || '/opt/liuguang-kb' }}"
