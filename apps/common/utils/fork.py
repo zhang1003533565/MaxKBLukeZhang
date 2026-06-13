@@ -5,13 +5,9 @@ from functools import reduce
 from typing import List, Set
 from urllib.parse import urljoin, urlparse, ParseResult, urlsplit, urlunparse
 
-from markdownify import markdownify
-import requests
 from bs4 import BeautifulSoup
 
 from common.utils.logger import maxkb_logger
-
-requests.packages.urllib3.disable_warnings()
 
 
 class ChildLink:
@@ -183,30 +179,8 @@ class Fork:
         return charset_list
 
     def fork(self):
-        try:
-
-            headers = {
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.51 Safari/537.36'
-            }
-
-            maxkb_logger.info(f'fork:{self.base_fork_url}')
-            response = requests.get(self.base_fork_url, verify=False, headers=headers)
-            if response.status_code != 200:
-                maxkb_logger.error(f"url: {self.base_fork_url} code:{response.status_code}")
-                return Fork.Response.error(f"url: {self.base_fork_url} code:{response.status_code}")
-            bf = self.get_beautiful_soup(response)
-        except Exception as e:
-            maxkb_logger.error(f'{str(e)}:{traceback.format_exc()}')
-            return Fork.Response.error(str(e))
-        bf = self.reset_beautiful_soup(bf)
-        link_list = self.get_child_link_list(bf)
-        content = self.get_content_html(bf)
-
-        r = markdownify(content, heading_style='ATX')
-        return Fork.Response.success(r, link_list)
+        return Fork.Response.error('Web crawling is disabled in knowledge-only mode.')
 
 
 def handler(base_url, response: Fork.Response):
     maxkb_logger.info(base_url.url, base_url.tag.text if base_url.tag else None, response.content)
-
-# ForkManage('https://bbs.fit2cloud.com/c/de/6', ['.md-content']).fork(3, set(), handler)

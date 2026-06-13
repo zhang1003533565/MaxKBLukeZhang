@@ -1,7 +1,4 @@
 export default {
-  github: 'Project Address',
-  wiki: 'User Manual',
-  forum: 'Forum For Help',
   logout: 'Log Out',
   apiKey: 'API Key',
   apiServiceAddress: 'API Service Address',
@@ -38,7 +35,5 @@ export default {
     neverExpires: 'Never expires',
     daysValid: 'Days valid',
   },
-  copyright: 'Copyright © 2014-2026 FIT2CLOUD, All rights reserved.',
-  userManualUrl: 'http://docs.maxkb.hk/',
-  forumUrl: 'https://github.com/1Panel-dev/MaxKB/discussions',
+  copyright: 'Copyright © 2026 Team Lumos. All rights reserved.',
 }

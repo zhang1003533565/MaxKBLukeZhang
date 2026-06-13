@@ -18,6 +18,8 @@ from common.utils.logger import maxkb_logger as logger
 class LocaleManager:
     """语言包管理器"""
 
+    SUPPORTED_LOCALE_CODES = {"en_US", "zh_CN"}
+
     def __init__(self, external_locale_path: str = None):
         """
         初始化语言包管理器
@@ -84,8 +86,11 @@ class LocaleManager:
 
     def _deploy_zip(self, zip_path: str, zip_name: str) -> bool:
         """部署 ZIP 格式的语言包"""
-        lang_code = zip_name[:-4].replace("-", "_")
+        lang_code = self._normalize_lang_code(zip_name[:-4])
         logger.info(f"Processing zip locale: {zip_name}")
+        if not lang_code:
+            logger.info(f"Skipping unsupported locale zip: {zip_name}")
+            return False
 
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             file_list = zip_ref.namelist()
@@ -103,8 +108,11 @@ class LocaleManager:
 
     def _deploy_folder(self, folder_path: str, folder_name: str) -> bool:
         """部署文件夹格式的语言包"""
-        lang_code = folder_name.replace("-", "_")
+        lang_code = self._normalize_lang_code(folder_name)
         logger.info(f"Processing folder locale: {folder_name}")
+        if not lang_code:
+            logger.info(f"Skipping unsupported locale folder: {folder_name}")
+            return False
 
         po_file = None
         json_file = None
@@ -131,6 +139,10 @@ class LocaleManager:
         Returns:
             bool: PO 文件是否发生变化
         """
+        if lang_code not in self.SUPPORTED_LOCALE_CODES:
+            logger.info(f"Skipping unsupported locale: {lang_code}")
+            return False
+
         po_changed = False
 
         # 部署 PO 文件
@@ -193,7 +205,16 @@ class LocaleManager:
         if not os.path.exists(admin_static_dir):
             return
 
-        json_files = [f for f in os.listdir(admin_static_dir) if f.endswith(".json") and f != "index.json"]
+        supported_json_files = {f"{code.replace('_', '-')}.json" for code in self.SUPPORTED_LOCALE_CODES}
+        for filename in os.listdir(admin_static_dir):
+            if filename.endswith(".json") and filename != "index.json" and filename not in supported_json_files:
+                os.remove(os.path.join(admin_static_dir, filename))
+
+        json_files = [
+            f
+            for f in os.listdir(admin_static_dir)
+            if f.endswith(".json") and f != "index.json" and f in supported_json_files
+        ]
 
         # 为 admin 目录生成 index.json
         index_file = os.path.join(admin_static_dir, "index.json")
@@ -211,12 +232,27 @@ class LocaleManager:
         os.makedirs(chat_static_dir, exist_ok=True)
 
         for filename in os.listdir(admin_static_dir):
+            if filename.endswith(".json") and filename != "index.json" and filename not in supported_json_files:
+                continue
             src_file = os.path.join(admin_static_dir, filename)
             dst_file = os.path.join(chat_static_dir, filename)
             if os.path.isfile(src_file):
                 shutil.copy2(src_file, dst_file)
 
+        for filename in os.listdir(chat_static_dir):
+            if filename.endswith(".json") and filename != "index.json" and filename not in supported_json_files:
+                os.remove(os.path.join(chat_static_dir, filename))
+
         logger.info("Copied all locale files from admin to chat directory")
+
+    @classmethod
+    def _normalize_lang_code(cls, lang_code: str) -> str | None:
+        normalized = lang_code.replace("-", "_")
+        if normalized == "en" or normalized.startswith("en_"):
+            return "en_US"
+        if normalized == "zh" or normalized == "zh_CN":
+            return "zh_CN"
+        return None
 
     @staticmethod
     def _compile_po_to_mo(po_file: str):

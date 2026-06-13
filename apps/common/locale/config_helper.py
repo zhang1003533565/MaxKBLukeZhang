@@ -15,47 +15,12 @@ class LocaleConfigHelper:
 
     # 标准化语言代码到显示名称的映射（ISO 639-1 标准）
     STANDARD_LANGUAGE_NAMES = {
-        "en": "English",
         "en-US": "English",
-        "zh-CN": "中文简体",
-        "zh-Hant": "中文繁体",
-        "ja": "日本語",
-        "ko": "한국어",
-        "fr": "Français",
-        "de": "Deutsch",
-        "es": "Español",
-        "it": "Italiano",
-        "pt": "Português",
-        "pt-br": "Português (Brasil)",
-        "ru": "Русский",
-        "ar": "العربية",
-        "hi": "हिन्दी",
-        "th": "ไทย",
-        "vi": "Tiếng Việt",
-        "id": "Bahasa Indonesia",
-        "ms": "Bahasa Melayu",
-        "tr": "Türkçe",
-        "nl": "Nederlands",
-        "pl": "Polski",
-        "sv": "Svenska",
-        "da": "Dansk",
-        "fi": "Suomi",
-        "no": "Norsk",
-        "cs": "Čeština",
-        "hu": "Magyar",
-        "ro": "Română",
-        "uk": "Українська",
-        "el": "Ελληνικά",
-        "he": "עברית",
-        "fa": "فارسی",
-        "ur": "اردو",
-        "bn": "বাংলা",
-        "ta": "தமிழ்",
-        "te": "తెలుగు",
-        "mr": "मराठी",
+        "zh-CN": "中文",
     }
+    SUPPORTED_LANGUAGE_CODES = {"en-US", "zh-CN"}
 
-    DEFAULT_LANGUAGES = [("en", "English"), ("zh", "中文简体"), ("zh-hant", "中文繁体")]
+    DEFAULT_LANGUAGES = [("en-US", "English"), ("zh-CN", "中文")]
 
     @staticmethod
     def get_languages(config_object, project_dir: str) -> List[Tuple[str, str]]:
@@ -156,6 +121,8 @@ class LocaleConfigHelper:
             if os.path.isdir(lang_path):
                 # 将目录名转换为标准语言代码格式 (zh_CN -> zh-cn, en_US -> en-us)
                 lang_code = lang_dir.replace("_", "-")
+                if lang_code not in LocaleConfigHelper.SUPPORTED_LANGUAGE_CODES:
+                    continue
 
                 # 获取显示名称（优先级：自定义 > 标准映射 > 目录名）
                 display_name = None
@@ -173,16 +140,7 @@ class LocaleConfigHelper:
                     else:
                         display_name = lang_dir
 
-                # 同时注册完整代码和基础代码，实现前后端兼容
-                # 例如：目录名为 ja_JP，会同时注册 'ja-jp' 和 'ja'
                 languages_dict[lang_code] = display_name
-
-                # 如果语言代码包含地区信息，同时注册基础代码
-                if "-" in lang_code:
-                    base_code = lang_code.split("-")[0]
-                    # 只有当基础代码还没有被注册时，才注册它
-                    if base_code not in languages_dict:
-                        languages_dict[base_code] = display_name
 
     @staticmethod
     def invalidate_cache():

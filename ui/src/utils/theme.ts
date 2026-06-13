@@ -37,17 +37,11 @@ export const defaultSetting = {
   icon: '',
   loginLogo: '',
   loginImage: '',
-  title: 'LumosKB',
+  title: '流光知识库',
   slogan: t('theme.defaultSlogan'),
 }
 
 export const defaultPlatformSetting = {
-  showUserManual: true,
-  userManualUrl: t('layout.userManualUrl'),
-  showForum: true,
-  forumUrl: t('layout.forumUrl'),
-  showProject: true,
-  projectUrl: 'https://github.com/zhang1003533565/MaxKBLukeZhang',
 }
 
 export function hexToRgba(hex?: string, alpha?: number) {

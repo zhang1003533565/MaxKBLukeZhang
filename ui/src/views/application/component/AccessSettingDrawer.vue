@@ -52,46 +52,28 @@
         </el-input>
         <el-text type="info" v-if="configType === 'wechat'">
           {{ $t('views.application.applicationAccess.copyUrl') }}
-          <a
-            class="color-primary"
-            href="https://mp.weixin.qq.com/advanced/advanced?action=dev&t=advanced/dev"
-            target="_blank"
-            >{{ $t('views.application.applicationAccess.wechatPlatform') }}</a
-          >{{ $t('views.application.applicationAccess.wechatSetting.urlInfo') }}
+          {{ $t('views.application.applicationAccess.wechatPlatform') }}
+          {{ $t('views.application.applicationAccess.wechatSetting.urlInfo') }}
         </el-text>
         <el-text type="info" v-if="configType === 'dingtalk'">
           {{ $t('views.application.applicationAccess.copyUrl') }}
-          <a
-            class="color-primary"
-            href="https://open-dev.dingtalk.com/fe/app?hash=%23%2Fcorp%2Fapp#/corp/app"
-            target="_blank"
-            >{{ $t('views.application.applicationAccess.dingtalkPlatform') }}</a
-          >{{ $t('views.application.applicationAccess.dingtalkSetting.urlInfo') }}
+          {{ $t('views.application.applicationAccess.dingtalkPlatform') }}
+          {{ $t('views.application.applicationAccess.dingtalkSetting.urlInfo') }}
         </el-text>
         <el-text type="info" v-if="configType === 'wecom'">
           {{ $t('views.application.applicationAccess.copyUrl') }}
-          <a
-            class="color-primary"
-            href="https://work.weixin.qq.com/wework_admin/frame#apps"
-            target="_blank"
-            >{{ $t('views.application.applicationAccess.wecomPlatform') }}</a
-          >{{ $t('views.application.applicationAccess.wecomSetting.urlInfo') }}
+          {{ $t('views.application.applicationAccess.wecomPlatform') }}
+          {{ $t('views.application.applicationAccess.wecomSetting.urlInfo') }}
         </el-text>
         <el-text type="info" v-if="configType === 'lark'">
           {{ $t('views.application.applicationAccess.copyUrl') }}
-          <a class="color-primary" href="https://open.feishu.cn/app/" target="_blank">{{
-            $t('views.application.applicationAccess.larkPlatform')
-          }}</a
-          >{{ $t('views.application.applicationAccess.larkSetting.urlInfo') }}
+          {{ $t('views.application.applicationAccess.larkPlatform') }}
+          {{ $t('views.application.applicationAccess.larkSetting.urlInfo') }}
         </el-text>
         <el-text type="info" v-if="configType === 'wecomBot'">
           {{ $t('views.application.applicationAccess.copyUrl') }}
-          <a
-            class="color-primary"
-            href="https://work.weixin.qq.com/wework_admin/frame#/manageTools"
-            target="_blank"
-            >{{ $t('views.application.applicationAccess.wecomPlatform') }}</a
-          >{{ $t('views.application.applicationAccess.wecomBotSetting.urlInfo') }}
+          {{ $t('views.application.applicationAccess.wecomPlatform') }}
+          {{ $t('views.application.applicationAccess.wecomBotSetting.urlInfo') }}
         </el-text>
       </el-form-item>
     </el-form>

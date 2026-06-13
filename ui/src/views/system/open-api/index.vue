@@ -71,14 +71,20 @@
             :key="endpoint.path + endpoint.method"
             class="endpoint-item"
           >
-            <div class="flex align-center mb-8">
-              <el-tag :type="endpoint.method === 'GET' ? 'success' : 'primary'" class="mr-8">
+            <div
+              class="endpoint-item__head flex align-center mb-8"
+              :class="{ active: testType === endpoint.value }"
+            >
+              <el-tag :type="getMethodTagType(endpoint.method)" class="mr-8">
                 {{ endpoint.method }}
               </el-tag>
               <code>{{ endpoint.path }}</code>
             </div>
             <p class="color-secondary">{{ endpoint.description }}</p>
             <pre>{{ endpoint.example }}</pre>
+            <el-button class="mt-8" size="small" @click="selectEndpoint(endpoint.value)">
+              {{ $t('views.system.knowledgeOpenAPI.testThisEndpoint') }}
+            </el-button>
           </div>
         </el-scrollbar>
       </el-card>
@@ -87,6 +93,15 @@
         <template #header>
           <span>{{ $t('views.system.knowledgeOpenAPI.testTitle') }}</span>
         </template>
+        <div class="selected-endpoint mb-16">
+          <el-tag :type="getMethodTagType(selectedEndpoint.method)" class="mr-8">
+            {{ selectedEndpoint.method }}
+          </el-tag>
+          <code>{{ buildTestUrl() }}</code>
+          <p class="color-secondary mt-8">
+            {{ $t('views.system.knowledgeOpenAPI.singleTestTip') }}
+          </p>
+        </div>
         <el-form label-position="top">
           <el-form-item :label="$t('views.system.knowledgeOpenAPI.apiKey')">
             <el-select
@@ -113,7 +128,7 @@
             </el-select>
           </el-form-item>
           <el-form-item
-            v-if="['documents', 'paragraphs', 'upload'].includes(testType)"
+            v-if="['knowledgeDetail', 'documents', 'paragraphs', 'upload'].includes(testType)"
             :label="$t('views.system.knowledgeOpenAPI.knowledgeId')"
           >
             <el-input v-model="form.knowledgeId" clearable />
@@ -156,6 +171,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import type { TagProps } from 'element-plus'
 import { t } from '@/locales'
 import useStore from '@/stores'
 import OpenAPI from '@/api/system/open-api'
@@ -172,10 +188,19 @@ interface OpenAPIKeyItem {
   workspace_name: string
   is_active: boolean
 }
+type EndpointMethod = 'GET' | 'POST'
+type TestType = 'knowledges' | 'knowledgeDetail' | 'documents' | 'paragraphs' | 'hitTest' | 'upload'
+interface EndpointItem {
+  value: TestType
+  method: EndpointMethod
+  path: string
+  description: string
+  example: string
+}
 
 const keyList = ref<OpenAPIKeyItem[]>([])
 const selectedKey = ref('')
-const testType = ref('knowledges')
+const testType = ref<TestType>('knowledges')
 const testResult = ref('')
 const uploadFile = ref<File>()
 
@@ -194,32 +219,44 @@ const baseUrl = computed(() => {
   return `${window.location.origin}/openapi/knowledge/v1/workspaces/${workspaceId.value}`
 })
 
-const endpoints = computed(() => [
+const endpoints = computed<EndpointItem[]>(() => [
   {
+    value: 'knowledges',
     method: 'GET',
     path: `${baseUrl.value}/knowledges`,
     description: t('views.system.knowledgeOpenAPI.docs.knowledges'),
     example: `curl -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" "${baseUrl.value}/knowledges?current_page=1&page_size=20"`,
   },
   {
+    value: 'knowledgeDetail',
+    method: 'GET',
+    path: `${baseUrl.value}/knowledges/{knowledge_id}`,
+    description: t('views.system.knowledgeOpenAPI.docs.knowledgeDetail'),
+    example: `curl -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" "${baseUrl.value}/knowledges/{knowledge_id}"`,
+  },
+  {
+    value: 'documents',
     method: 'GET',
     path: `${baseUrl.value}/knowledges/{knowledge_id}/documents`,
     description: t('views.system.knowledgeOpenAPI.docs.documents'),
     example: `curl -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" "${baseUrl.value}/knowledges/{knowledge_id}/documents"`,
   },
   {
+    value: 'upload',
     method: 'POST',
     path: `${baseUrl.value}/knowledges/{knowledge_id}/documents/upload`,
     description: t('views.system.knowledgeOpenAPI.docs.upload'),
     example: `curl -X POST -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" -F "file=@demo.docx" "${baseUrl.value}/knowledges/{knowledge_id}/documents/upload"`,
   },
   {
+    value: 'paragraphs',
     method: 'GET',
     path: `${baseUrl.value}/knowledges/{knowledge_id}/documents/{document_id}/paragraphs`,
     description: t('views.system.knowledgeOpenAPI.docs.paragraphs'),
     example: `curl -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" "${baseUrl.value}/knowledges/{knowledge_id}/documents/{document_id}/paragraphs"`,
   },
   {
+    value: 'hitTest',
     method: 'POST',
     path: `${baseUrl.value}/hit-test`,
     description: t('views.system.knowledgeOpenAPI.docs.hitTest'),
@@ -229,11 +266,25 @@ const endpoints = computed(() => [
 
 const testTypeOptions = computed(() => [
   { label: t('views.system.knowledgeOpenAPI.testTypes.knowledges'), value: 'knowledges' },
+  { label: t('views.system.knowledgeOpenAPI.testTypes.knowledgeDetail'), value: 'knowledgeDetail' },
   { label: t('views.system.knowledgeOpenAPI.testTypes.documents'), value: 'documents' },
   { label: t('views.system.knowledgeOpenAPI.testTypes.paragraphs'), value: 'paragraphs' },
   { label: t('views.system.knowledgeOpenAPI.testTypes.hitTest'), value: 'hitTest' },
   { label: t('views.system.knowledgeOpenAPI.testTypes.upload'), value: 'upload' },
 ])
+
+const selectedEndpoint = computed(() => {
+  return endpoints.value.find((endpoint) => endpoint.value === testType.value) || endpoints.value[0]
+})
+
+function getMethodTagType(method: EndpointMethod): TagProps['type'] {
+  return method === 'GET' ? 'success' : 'primary'
+}
+
+function selectEndpoint(value: TestType) {
+  testType.value = value
+  testResult.value = ''
+}
 
 function syncSelectedKey() {
   if (!selectedKey.value && keyList.value.length > 0) {
@@ -296,6 +347,18 @@ function testAPI() {
   if (!requireKey()) {
     return
   }
+  if (['knowledgeDetail', 'documents', 'paragraphs', 'upload'].includes(testType.value) && !form.knowledgeId) {
+    MsgError(t('views.system.knowledgeOpenAPI.knowledgeIdRequired'))
+    return
+  }
+  if (testType.value === 'paragraphs' && !form.documentId) {
+    MsgError(t('views.system.knowledgeOpenAPI.documentIdRequired'))
+    return
+  }
+  if (testType.value === 'hitTest' && (!form.knowledgeIds || !form.queryText)) {
+    MsgError(t('views.system.knowledgeOpenAPI.hitTestRequired'))
+    return
+  }
   if (testType.value === 'upload' && !uploadFile.value) {
     MsgError(t('views.system.knowledgeOpenAPI.selectFile'))
     return
@@ -322,6 +385,9 @@ function testAPI() {
     .then((res) => {
       testResult.value = JSON.stringify(res, null, 2)
     })
+    .catch((error) => {
+      testResult.value = JSON.stringify(error, null, 2)
+    })
     .finally(() => {
       testLoading.value = false
     })
@@ -336,17 +402,20 @@ function uploadTest(url: string) {
 }
 
 function buildTestUrl() {
+  if (testType.value === 'knowledgeDetail') {
+    return `${baseUrl.value}/knowledges/${form.knowledgeId || '{knowledge_id}'}`
+  }
   if (testType.value === 'documents') {
-    return `${baseUrl.value}/knowledges/${form.knowledgeId}/documents?current_page=1&page_size=10`
+    return `${baseUrl.value}/knowledges/${form.knowledgeId || '{knowledge_id}'}/documents?current_page=1&page_size=10`
   }
   if (testType.value === 'paragraphs') {
-    return `${baseUrl.value}/knowledges/${form.knowledgeId}/documents/${form.documentId}/paragraphs?current_page=1&page_size=10`
+    return `${baseUrl.value}/knowledges/${form.knowledgeId || '{knowledge_id}'}/documents/${form.documentId || '{document_id}'}/paragraphs?current_page=1&page_size=10`
   }
   if (testType.value === 'hitTest') {
     return `${baseUrl.value}/hit-test`
   }
   if (testType.value === 'upload') {
-    return `${baseUrl.value}/knowledges/${form.knowledgeId}/documents/upload`
+    return `${baseUrl.value}/knowledges/${form.knowledgeId || '{knowledge_id}'}/documents/upload`
   }
   return `${baseUrl.value}/knowledges?current_page=1&page_size=10`
 }
@@ -381,6 +450,21 @@ onMounted(loadKeys)
   .endpoint-item {
     padding: 12px 0;
     border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+
+  .endpoint-item__head {
+    padding: 6px 8px;
+    border-radius: 4px;
+
+    &.active {
+      background: var(--el-color-primary-light-9);
+    }
+  }
+
+  .selected-endpoint {
+    padding: 12px;
+    border: 1px solid var(--el-border-color-lighter);
+    background: var(--el-fill-color-light);
   }
 
   code,

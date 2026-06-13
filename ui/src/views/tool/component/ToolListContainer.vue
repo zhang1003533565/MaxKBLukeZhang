@@ -520,7 +520,7 @@ import WorkflowFormDialog from '../WorkflowFormDialog.vue'
 import ExecutionRecordDrawer from '@/views/tool-workflow/execution-record/ExecutionRecordDrawer.vue'
 import ToolStoreApi from '@/api/tool/store.ts'
 import { resetUrl, i18n_name } from '@/utils/common'
-import { MsgSuccess, MsgConfirm, MsgError } from '@/utils/message'
+import { MsgSuccess, MsgConfirm, MsgError, MsgAlert } from '@/utils/message'
 import { SourceTypeEnum } from '@/enums/common'
 import { dateFormat } from '@/utils/time'
 import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
@@ -1189,12 +1189,7 @@ function importTool(file: any) {
     })
     .catch((e: any) => {
       if (e.code === 400) {
-        MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-          cancelButtonText: t('common.confirm'),
-          confirmButtonText: t('common.professional'),
-        }).then(() => {
-          window.open('https://maxkb.cn/pricing.html', '_blank')
-        })
+        MsgAlert(t('common.tip'), t('views.application.tip.professionalMessage'))
       }
     })
 }

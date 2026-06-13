@@ -6,7 +6,6 @@
     @date：2025/4/14 19:18
     @desc:
 """
-import datetime
 import json
 import os
 import random
@@ -17,25 +16,22 @@ from django.core.cache import cache
 from django.core.mail.backends.smtp import EmailBackend
 from django.db import transaction
 from django.db.models import Q, QuerySet
-from django.utils import translation
 from rest_framework import serializers
 import uuid_utils.compat as uuid
 
 from common.constants.cache_version import Cache_Version
 from common.constants.exception_code_constants import ExceptionCodeConstants
-from common.constants.permission_constants import RoleConstants, Auth, ResourceAuthType, ResourcePermissionRole, \
-    ResourcePermission
+from common.constants.permission_constants import RoleConstants, Auth, ResourceAuthType, ResourcePermission
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.db.search import page_search
 from common.exception.app_exception import AppApiException
-from common.utils.common import valid_license, password_encrypt, password_verify, get_random_chars
+from common.utils.common import password_encrypt, password_verify
 from common.utils.rsa_util import decrypt
-from maxkb import settings
 from maxkb.conf import PROJECT_DIR
 from maxkb.const import CONFIG
 from system_manage.models import SystemSetting, SettingType, AuthTargetType, WorkspaceUserResourcePermission
 from users.models import User
-from django.utils.translation import gettext_lazy as _, to_locale
+from django.utils.translation import gettext_lazy as _
 from django.core import validators
 from django.core.mail import send_mail
 from django.utils.translation import get_language
@@ -50,6 +46,17 @@ PASSWORD_REGEX = re.compile(
 )
 
 version, get_key = Cache_Version.SYSTEM.value
+
+
+def normalize_language(language: str | None) -> str | None:
+    if not language:
+        return language
+    language = language.replace('_', '-')
+    if language == 'zh' or language.startswith('zh-'):
+        return 'zh-CN'
+    if language == 'en' or language.startswith('en-'):
+        return 'en-US'
+    return language
 
 
 class UserProfileResponse(serializers.ModelSerializer):
@@ -145,7 +152,7 @@ class UserProfileSerializer(serializers.Serializer):
             'permissions': auth.permission_list,
             'is_edit_password': password_verify(CONFIG.get('DEFAULT_PASSWORD', 'MaxKB@123..'),
                                                 user.password) if user.source == 'LOCAL' else False,
-            'language': user.language,
+            'language': normalize_language(user.language),
             'workspace_list': workspace_list,
             'role_name': role_name
         }
@@ -547,7 +554,7 @@ class UserManageSerializer(serializers.Serializer):
                         decrypted_data = json.loads(decrypted_raw) if decrypted_raw else {}
                         if isinstance(decrypted_data, dict):
                             instance.update(decrypted_data)
-                    except Exception as e:
+                    except Exception:
                         raise AppApiException(500, _("Invalid encrypted data"))
                 UserManageSerializer.RePasswordInstance(data=instance).is_valid(raise_exception=True)
             user = User.objects.filter(id=self.data.get('id')).first()
@@ -1148,7 +1155,7 @@ class SendEmailSerializer(serializers.Serializer):
                 html_message=f'{content.replace("${code}", code)}',
                 from_email=system_setting.meta.get('from_email'),
                 recipient_list=[email], fail_silently=False, connection=connection)
-        except Exception as e:
+        except Exception:
             cache.delete(get_key(code_cache_key_lock))
             return True
         cache.set(get_key(code_cache_key), code, timeout=60 * 30, version=version)
@@ -1189,11 +1196,10 @@ class SwitchLanguageSerializer(serializers.Serializer):
 
     def switch(self):
         self.is_valid(raise_exception=True)
-        language = self.data.get('language')
+        language = normalize_language(self.data.get('language'))
         support_language_list = CONFIG.get_languages()
         # 这个是一个list 完事是对象 key是语言的key value是语言的value  我只需要提取语言的key就行
         support_keys = [lang[0] for lang in support_language_list]
-        # support_language_list = ['zh-CN', 'zh-Hant', 'en-US'] en_US,ja,zh_CN,zh_Hant
         if not support_keys.__contains__(language):
             raise AppApiException(500, _('language only support:') + ','.join(support_keys))
         QuerySet(User).filter(id=self.data.get('user_id')).update(language=language)

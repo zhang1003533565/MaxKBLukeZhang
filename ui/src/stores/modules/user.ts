@@ -5,7 +5,7 @@ import UserApi from '@/api/user/user'
 import LoginApi from '@/api/user/login'
 import {useLocalStorage} from '@vueuse/core'
 
-import {localeConfigKey, getBrowserLang} from '@/locales/index'
+import {localeConfigKey, getBrowserLang, normalizeLocale} from '@/locales/index'
 import useThemeStore from './theme'
 import {defaultPlatformSetting} from '@/utils/theme'
 import useLoginStore from './login'
@@ -32,7 +32,7 @@ const useUserStore = defineStore('user', {
   }),
   actions: {
     getLanguage() {
-      return localStorage.getItem('MaxKB-locale') || getBrowserLang()
+      return normalizeLocale(localStorage.getItem('MaxKB-locale') || getBrowserLang())
     },
     setWorkspaceId(workspace_id: string) {
       this.workspace_id = workspace_id
@@ -126,8 +126,9 @@ const useUserStore = defineStore('user', {
           this.setWorkspaceId(workspace_list[0].id)
         }
         this.workspace_list = workspace_list
-        useLocalStorage<string>(localeConfigKey, 'en-US').value =
-          ok?.data?.language || this.getLanguage()
+        useLocalStorage<string>(localeConfigKey, 'en-US').value = normalizeLocale(
+          ok?.data?.language || this.getLanguage(),
+        )
         const theme = useThemeStore()
         theme.setTheme()
         return this.asyncGetProfile()
@@ -163,7 +164,7 @@ const useUserStore = defineStore('user', {
       return new Promise((resolve, reject) => {
         LoginApi.postLanguage({language: lang}, loading)
           .then(async (ok) => {
-            useLocalStorage(localeConfigKey, 'en-US').value = lang
+            useLocalStorage(localeConfigKey, 'en-US').value = normalizeLocale(lang)
             window.location.reload()
             resolve(ok)
           })

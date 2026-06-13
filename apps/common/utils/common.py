@@ -300,9 +300,7 @@ def valid_license(model=None, count=None, message=None):
             record_count = QuerySet(model).count()
 
             if not is_license_valid and record_count >= count:
-                error_message = message or _(
-                    'Limit {count} exceeded, please contact us (https://fit2cloud.com/).').format(
-                    count=count)
+                error_message = message or _('Limit {count} exceeded.').format(count=count)
                 raise AppApiException(400, error_message)
 
             return func(*args, **kwargs)

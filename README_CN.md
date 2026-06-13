@@ -1,6 +1,6 @@
-# LumosKB · 流光知识库
+# 流光知识库
 
-LumosKB 是流光小队的项目知识库中枢。主文档请查看 [README.md](./README.md)。
+流光知识库是流光小队的项目知识库中枢。主文档请查看 [README.md](./README.md)。
 
 常用命令：
 

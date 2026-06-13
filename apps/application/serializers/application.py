@@ -14,12 +14,9 @@ import json
 import os
 import pickle
 import re
-import tempfile
-import zipfile
 from functools import reduce
 from typing import Dict, List
 
-import requests
 import uuid_utils.compat as uuid
 from common import result
 from common.cache_data.application_access_token_cache import del_application_access_token
@@ -29,12 +26,10 @@ from common.exception.app_exception import AppApiException
 from common.field.common import UploadedFileField
 from common.utils.common import (
     _remove_empty_lines,
-    bytes_to_uploaded_file,
     generate_uuid,
     get_file_content,
     restricted_loads,
 )
-from common.utils.logger import maxkb_logger
 from common.utils.tool_code import ToolExecutor
 from django.core import validators
 from django.db import models, transaction
@@ -47,7 +42,6 @@ from knowledge.serializers.common import BatchMoveSerializer, BatchSerializer
 from knowledge.serializers.knowledge import KnowledgeModelSerializer, KnowledgeSerializer
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from maxkb.conf import PROJECT_DIR
-from maxkb.const import CONFIG
 from models_provider.models import Model
 from models_provider.tools import get_model_instance_by_model_workspace_id
 from rest_framework import serializers, status
@@ -60,7 +54,7 @@ from tools.models import Tool, ToolScope, ToolType, ToolWorkflow
 from tools.serializers.tool import ToolExportModelSerializer
 from trigger.models import Trigger, TriggerTask
 from users.models import User
-from users.serializers.user import is_workspace_manage, is_workspace_manage_permission_read
+from users.serializers.user import is_workspace_manage_permission_read
 
 from application.flow.common import Workflow
 from application.long_term_memory import schedule_extract_long_term_memory
@@ -583,39 +577,7 @@ class ApplicationSerializer(serializers.Serializer):
         return r
 
     def insert_template_workflow(self, instance: Dict):
-        self.is_valid(raise_exception=True)
-        work_flow_template = instance.get("work_flow_template")
-        download_url = work_flow_template.get("downloadUrl")
-        if not download_url.startswith("https://apps-assets.fit2cloud.com/"):
-            raise AppApiException(500, _("Illegal download url"))
-        # 查找匹配的版本名称
-        res = requests.get(download_url, timeout=5)
-        app = ApplicationSerializer(
-            data={"user_id": self.data.get("user_id"), "workspace_id": self.data.get("workspace_id")}
-        ).import_(
-            {
-                "file": bytes_to_uploaded_file(res.content, "file.mk"),
-                "folder_id": instance.get("folder_id", instance.get("workspace_id")),
-            },
-            True,
-        )
-        work_flow = app.get("work_flow")
-        for node in work_flow.get("nodes", []):
-            if node.get("type") == "base-node":
-                node_data = node.get("properties").get("node_data")
-                node_data["name"] = instance.get("name")
-                node_data["desc"] = instance.get("desc")
-        QuerySet(Application).filter(id=app.get("id")).update(
-            name=instance.get("name"), desc=instance.get("desc"), work_flow=work_flow
-        )
-        try:
-            download_callback_url = work_flow_template.get("downloadCallbackUrl", "")
-            if not download_callback_url.startswith("https://apps.fit2cloud.com"):
-                raise AppApiException(500, _("Illegal download callback url"))
-            requests.get(download_callback_url, timeout=5)
-        except Exception as e:
-            maxkb_logger.error(f"callback appstore tool download error: {e}")
-        return app
+        raise AppApiException(400, _("Application templates are disabled in knowledge-only mode."))
 
     def insert_workflow(self, instance: Dict):
         self.is_valid(raise_exception=True)
@@ -675,7 +637,7 @@ class ApplicationSerializer(serializers.Serializer):
         mk_instance_bytes = instance.get("file").read()
         try:
             mk_instance = restricted_loads(mk_instance_bytes)
-        except Exception as e:
+        except Exception:
             raise AppApiException(1001, _("Unsupported file format"))
         application = mk_instance.application
         tool_list = mk_instance.get_tool_list()
@@ -835,52 +797,7 @@ class ApplicationSerializer(serializers.Serializer):
 
         def get_appstore_templates(self):
             self.is_valid(raise_exception=True)
-            # 下载zip文件
-            try:
-                appstore_url = CONFIG.get("APPSTORE_URL", "https://apps-assets.fit2cloud.com/stable/maxkb.json.zip")
-                res = requests.get(appstore_url, timeout=5)
-                res.raise_for_status()
-                # 创建临时文件保存zip
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as temp_zip:
-                    temp_zip.write(res.content)
-                    temp_zip_path = temp_zip.name
-
-                try:
-                    # 解压zip文件
-                    with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-                        # 获取zip中的第一个文件（假设只有一个json文件）
-                        json_filename = zip_ref.namelist()[0]
-                        json_content = zip_ref.read(json_filename)
-
-                    # 将json转换为字典
-                    tool_store = json.loads(json_content.decode("utf-8"))
-                    tag_dict = {tag["name"]: tag["key"] for tag in tool_store["additionalProperties"]["tags"]}
-                    filter_apps = []
-                    for tool in tool_store["apps"]:
-                        if self.data.get("name", "") != "":
-                            if self.data.get("name").lower() not in tool.get("name", "").lower():
-                                continue
-                        if not tool["downloadUrl"].endswith(".mk"):
-                            continue
-                        versions = tool.get("versions", [])
-                        tool["label"] = tag_dict[tool.get("tags")[0]] if tool.get("tags") else ""
-                        tool["version"] = next(
-                            (
-                                version.get("name")
-                                for version in versions
-                                if version.get("downloadUrl") == tool["downloadUrl"]
-                            ),
-                        )
-                        filter_apps.append(tool)
-
-                    tool_store["apps"] = filter_apps
-                    return tool_store
-                finally:
-                    # 清理临时文件
-                    os.unlink(temp_zip_path)
-            except Exception as e:
-                maxkb_logger.error(f"fetch appstore tools error: {e}")
-                return {"apps": [], "additionalProperties": {"tags": []}}
+            return {"apps": [], "additionalProperties": {"tags": []}}
 
 
 class TextToSpeechRequest(serializers.Serializer):
@@ -1153,21 +1070,10 @@ class ApplicationOperateSerializer(serializers.Serializer):
         knowledge_node_list = ApplicationOperateSerializer.get_search_node(instance.get("work_flow"))
         for knowledge_node in knowledge_node_list:
             node_data = knowledge_node.get("properties").get("node_data")
-            # 全部知识库id
-            all_knowledge_id_list = node_data.get("all_knowledge_id_list") or []
             # 用户修改的知识库id
             knowledge_id_list = node_data.get("knowledge_id_list") or []
-            # 用户可以看到的知识库
-            knowledge_list = node_data.get("knowledge_list") or []
-
             no_permission_knowledge_id_list = node_data.get("no_permission_knowledge_id_list") or []
 
-            view_knowledge_id_list = [knowledge.get("id") for knowledge in knowledge_list]
-            other_knowledge_id_list = [
-                knowledge_id
-                for knowledge_id in all_knowledge_id_list
-                if not view_knowledge_id_list.__contains__(knowledge_id)
-            ]
             node_data["knowledge_id_list"] = no_permission_knowledge_id_list + knowledge_id_list
 
     def move(self, folder_id: str):
@@ -1301,75 +1207,7 @@ class ApplicationOperateSerializer(serializers.Serializer):
         return self.one(with_valid=False)
 
     def update_template_workflow(self, instance: Dict, app: Application):
-        self.is_valid(raise_exception=True)
-        work_flow_template = instance.get("work_flow_template")
-        download_url = work_flow_template.get("downloadUrl")
-        if not download_url.startswith("https://apps-assets.fit2cloud.com/"):
-            raise AppApiException(500, _("Illegal download url"))
-        # 查找匹配的版本名称
-        res = requests.get(download_url, timeout=5)
-        try:
-            mk_instance = restricted_loads(res.content)
-        except Exception as e:
-            raise AppApiException(1001, _("Unsupported file format"))
-        application = mk_instance.application
-        tool_list = mk_instance.get_tool_list()
-        update_tool_map = {}
-        if len(tool_list) > 0:
-            tool_id_list = reduce(
-                lambda x, y: [*x, *y],
-                [[tool.get("id"), generate_uuid((tool.get("id") + app.workspace_id or ""))] for tool in tool_list],
-                [],
-            )
-            # 存在的工具列表
-            exits_tool_id_list = [
-                str(tool.id) for tool in QuerySet(Tool).filter(id__in=tool_id_list, workspace_id=app.workspace_id)
-            ]
-            # 需要更新的工具集合
-            update_tool_map = {
-                tool.get("id"): generate_uuid((tool.get("id") + app.workspace_id or ""))
-                for tool in tool_list
-                if not exits_tool_id_list.__contains__(tool.get("id"))
-            }
-
-            tool_list = [
-                {**tool, "id": update_tool_map.get(tool.get("id"))}
-                for tool in tool_list
-                if not exits_tool_id_list.__contains__(tool.get("id"))
-                and not exits_tool_id_list.__contains__(generate_uuid((tool.get("id") + app.workspace_id or "")))
-            ]
-
-        tool_model_list = [self.to_tool(f, app.workspace_id, self.data.get("user_id")) for f in tool_list]
-        work_flow = application.get("work_flow")
-        for node in work_flow.get("nodes", []):
-            hand_node(node, update_tool_map)
-            if node.get("type") == "loop-node":
-                for n in node.get("properties", {}).get("node_data", {}).get("loop_body", {}).get("nodes", []):
-                    hand_node(n, update_tool_map)
-        app.work_flow = work_flow
-        application = mk_instance.application
-        app.name = application.get("name")
-        app.desc = application.get("desc")
-        app.save()
-
-        if len(tool_model_list) > 0:
-            QuerySet(Tool).bulk_create(tool_model_list)
-            UserResourcePermissionSerializer(
-                data={
-                    "workspace_id": app.workspace_id,
-                    "user_id": self.data.get("user_id"),
-                    "auth_target_type": AuthTargetType.TOOL.value,
-                }
-            ).auth_resource_batch([t.id for t in tool_model_list])
-        try:
-            download_callback_url = work_flow_template.get("downloadCallbackUrl", "")
-            if not download_callback_url.startswith("https://apps.fit2cloud.com"):
-                raise AppApiException(500, _("Illegal download callback url"))
-            requests.get(download_callback_url, timeout=5)
-        except Exception as e:
-            maxkb_logger.error(f"callback appstore tool download error: {e}")
-
-        return self.one(with_valid=False)
+        raise AppApiException(400, _("Application templates are disabled in knowledge-only mode."))
 
     @staticmethod
     def to_tool(tool, workspace_id, user_id):

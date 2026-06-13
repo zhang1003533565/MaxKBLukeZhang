@@ -121,7 +121,7 @@ class Config(dict):
             from common.utils.logger import maxkb_logger
 
             maxkb_logger.warning(f"Failed to load languages, using defaults: {e}")
-            return [("en", "English"), ("zh", "中文简体"), ("zh-hant", "中文繁体")]
+            return [("en-US", "English"), ("zh-CN", "中文")]
 
     def get_log_level(self):
         return self.get("LOG_LEVEL", "DEBUG")

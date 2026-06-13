@@ -13,21 +13,29 @@ type Recordable<T = any> = Record<string, T>
 const langModuleMap = new Map<string, Record<string, any>>()
 export const langCode: string[] = []
 export const localeConfigKey = 'MaxKB-locale'
+const supportedLocales = ['zh-CN', 'en-US']
 
 const languages = usePreferredLanguages()
 
-export function getBrowserLang() {
-  const browserLang = navigator.language || languages.value[0] || 'en-US'
-
-  if (browserLang === 'zh-HK' || browserLang === 'zh-TW') {
-    return 'zh-Hant'
+export function normalizeLocale(lang?: string | null) {
+  if (!lang) {
+    return 'en-US'
   }
 
-  if (browserLang === 'zh-CN') {
+  if (lang === 'zh-CN' || lang === 'zh' || lang.startsWith('zh-')) {
     return 'zh-CN'
   }
 
+  if (lang === 'en-US' || lang === 'en' || lang.startsWith('en-')) {
+    return 'en-US'
+  }
+
   return 'en-US'
+}
+
+export function getBrowserLang() {
+  const browserLang = navigator.language || languages.value[0] || 'en-US'
+  return normalizeLocale(browserLang)
 }
 
 function generateLangModuleMap() {
@@ -35,6 +43,7 @@ function generateLangModuleMap() {
 
   Object.keys(langModules).forEach((fullPath) => {
     const code = fullPath.replace('./lang/', '').replace('/index.ts', '')
+    if (!supportedLocales.includes(code)) return
     const module = langModules[fullPath]
     langModuleMap.set(code, module.default)
     if (!langCode.includes(code)) {
@@ -55,7 +64,7 @@ const importMessages = computed(() => {
 
 export const i18n = createI18n({
   legacy: false,
-  locale: useLocalStorage(localeConfigKey, getBrowserLang()).value || getBrowserLang(),
+  locale: normalizeLocale(useLocalStorage(localeConfigKey, getBrowserLang()).value || getBrowserLang()),
   fallbackLocale: getBrowserLang(),
   messages: importMessages.value,
   globalInjection: true,
@@ -99,6 +108,7 @@ export async function initExternalLocales(): Promise<void> {
   const availableLocales = await discoverExternalLocales()
 
   for (const code of availableLocales) {
+    if (!supportedLocales.includes(code)) continue
     if (langModuleMap.has(code)) continue
 
     const data = await loadExternalLocale(code)

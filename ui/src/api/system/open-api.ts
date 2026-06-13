@@ -41,7 +41,16 @@ const callOpenAPI: (
     ...options,
     headers,
   })
-  return response.json()
+  const contentType = response.headers.get('content-type') || ''
+  const data = contentType.includes('application/json') ? await response.json() : await response.text()
+  if (response.ok || (typeof data === 'object' && data !== null && 'code' in data)) {
+    return data
+  }
+  return {
+    code: response.status,
+    message: response.statusText || 'Request failed',
+    data,
+  }
 }
 
 const uploadDocument: (

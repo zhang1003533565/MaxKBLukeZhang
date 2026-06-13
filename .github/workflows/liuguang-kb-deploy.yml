@@ -1,4 +1,4 @@
-name: Build and Deploy LumosKB
+name: Build and Deploy 流光知识库
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/lumoskb
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/liuguang-kb
 
 jobs:
   build:
@@ -69,16 +69,16 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            DEPLOY_PATH="${{ vars.SERVER_DEPLOY_PATH || '/opt/lumoskb' }}"
+            DEPLOY_PATH="${{ vars.SERVER_DEPLOY_PATH || '/opt/liuguang-kb' }}"
             cd "$DEPLOY_PATH"
             git fetch origin main
             git reset --hard "${{ github.sha }}"
             if [ ! -f deploy/.env ]; then
               cp deploy/.env.example deploy/.env
             fi
-            if grep -q '^LUMOSKB_IMAGE=' deploy/.env; then
-              sed -i.bak 's|^LUMOSKB_IMAGE=.*|LUMOSKB_IMAGE=${{ needs.build.outputs.image_ref }}|' deploy/.env
+            if grep -q '^LIUGUANG_KB_IMAGE=' deploy/.env; then
+              sed -i.bak 's|^LIUGUANG_KB_IMAGE=.*|LIUGUANG_KB_IMAGE=${{ needs.build.outputs.image_ref }}|' deploy/.env
             else
-              printf '\nLUMOSKB_IMAGE=%s\n' '${{ needs.build.outputs.image_ref }}' >> deploy/.env
+              printf '\nLIUGUANG_KB_IMAGE=%s\n' '${{ needs.build.outputs.image_ref }}' >> deploy/.env
             fi
             DEPLOY_MODE=pull ./scripts/server-deploy.sh

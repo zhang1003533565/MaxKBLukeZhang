@@ -387,7 +387,7 @@ import CreateModelDialog from '@/views/model/component/CreateModelDialog.vue'
 import SelectProviderDialog from '@/views/model/component/SelectProviderDialog.vue'
 import type { Provider, Model } from '@/api/type/model'
 import { allObj } from '@/views/model/component/data'
-import { MsgSuccess, MsgConfirm, MsgError } from '@/utils/message'
+import { MsgSuccess, MsgConfirm, MsgError, MsgAlert } from '@/utils/message'
 import { useRouter, useRoute } from 'vue-router'
 import useStore from '@/stores'
 import { t } from '@/locales'
@@ -442,12 +442,7 @@ const importApplication = (file: any) => {
     })
     .catch((e) => {
       if (e.code === 400) {
-        MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-          cancelButtonText: t('common.confirm'),
-          confirmButtonText: t('common.professional'),
-        }).then(() => {
-          window.open('https://maxkb.cn/pricing.html', '_blank')
-        })
+        MsgAlert(t('common.tip'), t('views.application.tip.professionalMessage'))
       }
     })
 }
@@ -488,12 +483,7 @@ function importKnowledgeBundle(file: any) {
     })
     .catch((e: any) => {
       if (e.code === 400) {
-        MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-          cancelButtonText: t('common.confirm'),
-          confirmButtonText: t('common.professional'),
-        }).then(() => {
-          window.open('https://maxkb.cn/pricing.html', '_blank')
-        })
+        MsgAlert(t('common.tip'), t('views.application.tip.professionalMessage'))
       }
     })
 }
@@ -518,12 +508,7 @@ function importTool(file: any) {
     })
     .catch((e: any) => {
       if (e.code === 400) {
-        MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-          cancelButtonText: t('common.confirm'),
-          confirmButtonText: t('common.professional'),
-        }).then(() => {
-          window.open('https://maxkb.cn/pricing.html', '_blank')
-        })
+        MsgAlert(t('common.tip'), t('views.application.tip.professionalMessage'))
       }
     })
 }

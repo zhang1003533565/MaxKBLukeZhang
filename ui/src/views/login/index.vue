@@ -138,9 +138,8 @@ import {getBrowserLang, t} from '@/locales'
 import useStore from '@/stores'
 import {useI18n} from 'vue-i18n'
 import QrCodeTab from '@/views/login/scanCompinents/QrCodeTab.vue'
-import {MsgConfirm, MsgError} from '@/utils/message.ts'
+import {MsgConfirm} from '@/utils/message.ts'
 import * as dd from 'dingtalk-jsapi'
-import {loadScript} from '@/utils/common'
 import JSEncrypt from 'jsencrypt';
 
 const router = useRouter()
@@ -458,8 +457,6 @@ function changeMode(val: string, needMessage: boolean = true) {
 //     }
 //   })
 // })
-declare const window: any
-
 onMounted(() => {
   const route = useRoute()
   const currentUrl = ref(route.fullPath)
@@ -478,58 +475,9 @@ onMounted(() => {
     }
   }
 
-  const handleLark = () => {
-    const appId = params.get('appId')
-    const callRequestAuthCode = () => {
-      window.tt?.requestAuthCode({
-        appId: appId,
-        success: (res: any) => {
-          login.larkCallback(res.code).then(() => {
-            goAfterLogin()
-          })
-        },
-        fail: (error: any) => {
-          MsgError(error)
-        },
-      })
-    }
-
-    loadScript('https://lf-scm-cn.feishucdn.com/lark/op/h5-js-sdk-1.5.35.js', {
-      jsId: 'lark-sdk',
-      forceReload: true,
-    })
-      .then(() => {
-        if (window.tt) {
-          window.tt.requestAccess({
-            appID: appId,
-            scopeList: [],
-            success: (res: any) => {
-              login.larkCallback(res.code).then(() => {
-                goAfterLogin()
-              })
-            },
-            fail: (error: any) => {
-              const {errno} = error
-              if (errno === 103) {
-                callRequestAuthCode()
-              }
-            },
-          })
-        } else {
-          callRequestAuthCode()
-        }
-      })
-      .catch((error) => {
-        console.error('SDK 加载失败:', error)
-      })
-  }
-
   switch (client) {
     case 'dingtalk':
       handleDingTalk()
-      break
-    case 'lark':
-      handleLark()
       break
     default:
       break

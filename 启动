@@ -1,8 +1,6 @@
-./scripts/dev-deps-up.sh
-./scripts/dev-backend.sh
-./scripts/dev-celery.sh
-./scripts/dev-frontend-admin.sh
+./scripts/dev-all.sh
+./scripts/validate-code-rules.sh
 http://localhost:3000/admin/
 admin
-MaxKB@123..
+LiuguangKB@123..
 Zhang@2114

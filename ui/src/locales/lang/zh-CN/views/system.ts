@@ -171,9 +171,15 @@ export default {
     file: '文件',
     selectFile: '选择文件',
     sendTest: '测试接口',
+    testThisEndpoint: '测试此接口',
+    singleTestTip: '当前只会请求选中的这一个接口。',
+    knowledgeIdRequired: '请输入知识库 ID',
+    documentIdRequired: '请输入文档 ID',
+    hitTestRequired: '请输入知识库 ID 列表和检索问题',
     deleteConfirm: '确定删除这个 API Key 吗？删除后外部系统将无法继续访问。',
     docs: {
       knowledges: '分页获取当前 API Key 可访问的知识库。',
+      knowledgeDetail: '获取指定知识库详情。',
       documents: '分页获取指定知识库下的文档。',
       upload: '上传文件、自动分段、创建文档并进入向量化队列。',
       paragraphs: '分页获取指定文档的分段内容。',
@@ -181,6 +187,7 @@ export default {
     },
     testTypes: {
       knowledges: '知识库列表',
+      knowledgeDetail: '知识库详情',
       documents: '文档列表',
       paragraphs: '分段列表',
       hitTest: '召回测试',

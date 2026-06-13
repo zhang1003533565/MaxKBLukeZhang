@@ -9,14 +9,9 @@
 
 import asyncio
 import json
-import os
 
-# coding=utf-8
-import tempfile
-import zipfile
 from typing import Dict
 
-import requests
 import uuid_utils.compat as uuid
 from application.flow.common import Workflow, WorkflowMode
 from application.flow.i_step_node import ToolWorkflowPostHandler
@@ -27,8 +22,6 @@ from application.serializers.common import ToolExecute
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.exception.app_exception import AppApiException
 from common.field.common import UploadedFileField
-from common.utils.common import bytes_to_uploaded_file
-from common.utils.logger import maxkb_logger
 from common.utils.tool_code import ToolExecutor
 from django.db.models import Q, QuerySet
 from django.utils import timezone
@@ -36,14 +29,12 @@ from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from knowledge.models import Knowledge, KnowledgeScope
 from knowledge.serializers.knowledge import KnowledgeModelSerializer, KnowledgeSerializer
-from maxkb.const import CONFIG
 from rest_framework import serializers
 from rest_framework.utils.formatting import lazy_format
 from system_manage.models.resource_mapping import ResourceMapping
 from users.models import User
 
 from tools.models import Tool, ToolWorkflow, ToolWorkflowVersion
-from tools.serializers.tool import ToolSerializer
 
 tool_executor = ToolExecutor()
 
@@ -323,31 +314,7 @@ class ToolWorkflowSerializer(serializers.Serializer):
                 )
                 return self.one()
             if instance.get("work_flow_template"):
-                template_instance = instance.get("work_flow_template")
-                download_url = template_instance.get("downloadUrl")
-                if not download_url.startswith("https://apps-assets.fit2cloud.com/"):
-                    raise AppApiException(500, _("Illegal download url"))
-                # 查找匹配的版本名称
-                res = requests.get(download_url, timeout=5)
-                tool = QuerySet(Tool).filter(id=self.data.get("tool_id")).first()
-                ToolSerializer.Import(
-                    data={
-                        "user_id": self.data.get("user_id"),
-                        "workspace_id": workflow_id,
-                        "folder_id": tool.folder_id,
-                        "file": bytes_to_uploaded_file(res.content, "file.tool"),
-                    }
-                ).update_template_workflow(str(self.data.get("tool_id")))
-
-                try:
-                    download_callback_url = template_instance.get("downloadCallbackUrl", "")
-                    if not download_callback_url.startswith("https://apps.fit2cloud.com"):
-                        raise AppApiException(500, _("Illegal download callback url"))
-                    requests.get(download_callback_url, timeout=5)
-                except Exception as e:
-                    maxkb_logger.error(f"callback appstore tool download error: {e}")
-
-                return self.one()
+                raise AppApiException(400, _("Tool workflow templates are disabled in knowledge-only mode."))
 
         def one(self):
             self.is_valid(raise_exception=True)
@@ -397,54 +364,7 @@ class StoreToolWorkflow(serializers.Serializer):
 
     def get_appstore_templates(self):
         self.is_valid(raise_exception=True)
-        # 下载zip文件
-        try:
-            appstore_url = CONFIG.get("APPSTORE_URL", "https://apps-assets.fit2cloud.com/stable/maxkb.json.zip")
-            res = requests.get(appstore_url, timeout=5)
-            res.raise_for_status()
-            # 创建临时文件保存zip
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as temp_zip:
-                temp_zip.write(res.content)
-                temp_zip_path = temp_zip.name
-
-            try:
-                # 解压zip文件
-                with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-                    # 获取zip中的第一个文件（假设只有一个json文件）
-                    json_filename = zip_ref.namelist()[0]
-                    json_content = zip_ref.read(json_filename)
-
-                # 将json转换为字典
-                tool_store = json.loads(json_content.decode("utf-8"))
-                tag_dict = {tag["name"]: tag["key"] for tag in tool_store["additionalProperties"]["tags"]}
-                filter_apps = []
-                for tool in tool_store["apps"]:
-                    if self.data.get("name", "") != "":
-                        if self.data.get("name").lower() not in tool.get("name", "").lower():
-                            continue
-                    if not tool["downloadUrl"].endswith(".tool") or not [
-                        tag_dict[tag] for tag in tool.get("tags")
-                    ].__contains__("workflow_template"):
-                        continue
-                    versions = tool.get("versions", [])
-                    tool["label"] = tag_dict[tool.get("tags")[0]] if tool.get("tags") else ""
-                    tool["version"] = next(
-                        (
-                            version.get("name")
-                            for version in versions
-                            if version.get("downloadUrl") == tool["downloadUrl"]
-                        ),
-                    )
-                    filter_apps.append(tool)
-
-                tool_store["apps"] = filter_apps
-                return tool_store
-            finally:
-                # 清理临时文件
-                os.unlink(temp_zip_path)
-        except Exception as e:
-            maxkb_logger.error(f"fetch appstore tools error: {e}")
-            return {"apps": [], "additionalProperties": {"tags": []}}
+        return {"apps": [], "additionalProperties": {"tags": []}}
 
 
 def update_resource_mapping_by_tool(tool_id: str, other_resource_mapping=None):

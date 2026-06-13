@@ -172,9 +172,15 @@ export default {
     file: 'File',
     selectFile: 'Select File',
     sendTest: 'Test API',
+    testThisEndpoint: 'Test This Endpoint',
+    singleTestTip: 'Only the selected endpoint will be requested.',
+    knowledgeIdRequired: 'Please enter a Knowledge ID',
+    documentIdRequired: 'Please enter a Document ID',
+    hitTestRequired: 'Please enter Knowledge IDs and a query',
     deleteConfirm: 'Delete this API Key? External systems will no longer be able to access it.',
     docs: {
       knowledges: 'Get paginated knowledge bases accessible to the current API key.',
+      knowledgeDetail: 'Get knowledge base details.',
       documents: 'Get paginated documents under a knowledge base.',
       upload: 'Upload files, split them, create documents, and enqueue vectorization.',
       paragraphs: 'Get paginated paragraph sections for a document.',
@@ -182,6 +188,7 @@ export default {
     },
     testTypes: {
       knowledges: 'Knowledge List',
+      knowledgeDetail: 'Knowledge Detail',
       documents: 'Document List',
       paragraphs: 'Paragraph List',
       hitTest: 'Recall Test',

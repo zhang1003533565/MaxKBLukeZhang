@@ -1,14 +1,15 @@
 <p align="center">
-  <img src="./ui/src/assets/logo/lumoskb-logo.svg" alt="LumosKB" width="360" />
+  <img src="./ui/src/assets/logo/liuguang-kb-icon.svg" alt="流光知识库 Logo" width="72" />
 </p>
 
+<h1 align="center">流光知识库</h1>
 <h3 align="center">流光小队的项目知识库中枢</h3>
 
 ---
 
 ## 项目定位
 
-LumosKB 是流光小队维护的知识库系统，当前项目目标是保留干净的知识库能力：知识库管理、文档上传、分段、向量化、召回测试、简单聊天测试、用户与工作区隔离，以及对外开放的知识库 API。
+流光知识库是流光小队维护的知识库系统，当前项目目标是保留干净的知识库能力：知识库管理、文档上传、分段、向量化、召回测试、简单聊天测试、用户与工作区隔离，以及对外开放的知识库 API。
 
 当前项目不作为智能体平台使用，默认不暴露应用、工作流、触发器、工具等入口。
 
@@ -35,14 +36,7 @@ LumosKB 是流光小队维护的知识库系统，当前项目目标是保留干
 - 管理端：http://localhost:3000/admin
 - 后端：http://localhost:8080
 
-常用开发命令：
-
-```bash
-./scripts/dev-deps-up.sh      # 只启动 PostgreSQL 和 Redis
-./scripts/dev-backend.sh      # 只启动后端
-./scripts/dev-celery.sh       # 只启动任务队列
-./scripts/dev-frontend-admin.sh
-```
+本地开发只保留这一条启动入口。它会自动拉起 PostgreSQL、Redis、后端、任务队列和前端。
 
 代码校验：
 
@@ -55,8 +49,8 @@ LumosKB 是流光小队维护的知识库系统，当前项目目标是保留干
 服务器需要先安装 Docker 和 Docker Compose。首次部署可以直接执行：
 
 ```bash
-git clone git@github.com:zhang1003533565/MaxKBLukeZhang.git /opt/lumoskb
-cd /opt/lumoskb
+git clone git@github.com:zhang1003533565/MaxKBLukeZhang.git /opt/liuguang-kb
+cd /opt/liuguang-kb
 ./scripts/server-deploy.sh
 ```
 
@@ -72,7 +66,7 @@ http://服务器IP:8080/admin
 
 ```text
 用户名：admin
-密码：LumosKB@123..
+密码：LiuguangKB@123..
 ```
 
 首次启动后建议立刻修改管理员密码。
@@ -88,14 +82,14 @@ deploy/.env
 常用配置：
 
 ```dotenv
-LUMOSKB_PORT=8080
-LUMOSKB_IMAGE=ghcr.io/zhang1003533565/lumoskb:latest
-POSTGRES_DB=lumoskb
-POSTGRES_USER=lumoskb
+LIUGUANG_KB_PORT=8080
+LIUGUANG_KB_IMAGE=ghcr.io/zhang1003533565/liuguang-kb:latest
+POSTGRES_DB=liuguang_kb
+POSTGRES_USER=liuguang_kb
 POSTGRES_PASSWORD=自动生成
 REDIS_PASSWORD=自动生成
 MAXKB_SECRET_KEY=自动生成
-MAXKB_DEFAULT_PASSWORD=LumosKB@123..
+MAXKB_DEFAULT_PASSWORD=LiuguangKB@123..
 MAXKB_KNOWLEDGE_ONLY=true
 ```
 
@@ -122,14 +116,14 @@ MAXKB_KNOWLEDGE_ONLY=true
 已添加工作流：
 
 ```text
-.github/workflows/lumoskb-deploy.yml
+.github/workflows/liuguang-kb-deploy.yml
 ```
 
 它会在推送到 `main` 后构建 Docker 镜像并推送到 GHCR：
 
 ```text
-ghcr.io/<github-owner>/lumoskb:<commit-sha>
-ghcr.io/<github-owner>/lumoskb:latest
+ghcr.io/<github-owner>/liuguang-kb:<commit-sha>
+ghcr.io/<github-owner>/liuguang-kb:latest
 ```
 
 要启用自动 SSH 部署，需要在 GitHub 仓库配置：
@@ -138,7 +132,7 @@ Repository Variables：
 
 ```text
 ENABLE_SERVER_DEPLOY=true
-SERVER_DEPLOY_PATH=/opt/lumoskb
+SERVER_DEPLOY_PATH=/opt/liuguang-kb
 ```
 
 Repository Secrets：
@@ -153,8 +147,8 @@ SERVER_PORT=22
 服务器上需要提前存在仓库目录：
 
 ```bash
-git clone git@github.com:zhang1003533565/MaxKBLukeZhang.git /opt/lumoskb
-cd /opt/lumoskb
+git clone git@github.com:zhang1003533565/MaxKBLukeZhang.git /opt/liuguang-kb
+cd /opt/liuguang-kb
 ./scripts/server-deploy.sh --pull
 ```
 

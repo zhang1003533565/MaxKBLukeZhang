@@ -30,7 +30,7 @@
         <el-card shadow="never" class="layout-bg">
           <div class="flex-between">
             <h5 class="mb-16">{{ $t('theme.pagePreview') }}</h5>
-            <el-button type="primary" link @click="resetForm('login')">
+            <el-button type="primary" link @click="resetForm">
               {{ $t('theme.restoreDefaults') }}
             </el-button>
           </div>
@@ -144,105 +144,6 @@
           </div>
         </el-card>
       </el-card>
-      <el-card style="--el-card-padding: 16px" class="mt-16">
-        <h5 class="mb-16">{{ $t('theme.platformSetting') }}</h5>
-        <el-card shadow="never" class="layout-bg">
-          <div class="flex-between">
-            <h5 class="mb-16">{{ $t('theme.pagePreview') }}</h5>
-            <el-button type="primary" link @click="resetForm('platform')">
-              {{ $t('theme.restoreDefaults') }}
-            </el-button>
-          </div>
-          <el-scrollbar>
-            <div class="theme-preview">
-              <el-row :gutter="8">
-                <el-col :span="16">
-                  <div class="theme-platform mr-16">
-                    <div
-                      class="theme-platform-header border-b flex-between"
-                      :class="!isDefaultTheme ? 'custom-header' : ''"
-                    >
-                      <div class="flex-center h-full">
-                        <div class="app-title-container cursor">
-                          <div class="logo flex-center">
-                            <LogoFull height="25px" />
-                          </div>
-                        </div>
-                      </div>
-                      <div class="flex-center">
-                        <AppIcon
-                          iconName="app-github"
-                          class="cursor color-secondary mr-8 ml-8"
-                          style="font-size: 20px"
-                          v-if="themeForm.showProject"
-                        ></AppIcon>
-                        <AppIcon
-                          iconName="app-user-manual"
-                          class="cursor color-secondary mr-8 ml-8"
-                          style="font-size: 20px"
-                          v-if="themeForm.showUserManual"
-                        ></AppIcon>
-                        <AppIcon
-                          iconName="app-problems"
-                          class="cursor color-secondary ml-8"
-                          style="font-size: 20px"
-                          v-if="themeForm.showForum"
-                        ></AppIcon>
-                      </div>
-                    </div>
-                  </div>
-                </el-col>
-                <el-col :span="8">
-                  <div class="theme-form">
-                    <div>
-                      <el-checkbox
-                        v-model="themeForm.showUserManual"
-                        :label="$t('theme.showUserManual')"
-                      />
-                      <div class="ml-24">
-                        <el-input
-                          v-model="themeForm.userManualUrl"
-                          :placeholder="$t('theme.urlPlaceholder')"
-                          show-word-limit
-                          maxlength="128"
-                        />
-                      </div>
-                    </div>
-                    <div class="mt-4">
-                      <el-checkbox v-model="themeForm.showForum" :label="$t('theme.showForum')" />
-                      <div class="ml-24">
-                        <el-input
-                          v-model="themeForm.forumUrl"
-                          :placeholder="$t('theme.urlPlaceholder')"
-                          show-word-limit
-                          maxlength="128"
-                        />
-                      </div>
-                    </div>
-                    <div class="mt-4">
-                      <el-checkbox
-                        v-model="themeForm.showProject"
-                        :label="$t('theme.showProject')"
-                      />
-                      <div class="ml-24">
-                        <el-input
-                          v-model="themeForm.projectUrl"
-                          :placeholder="$t('theme.urlPlaceholder')"
-                          show-word-limit
-                          maxlength="128"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </el-col>
-              </el-row>
-            </div>
-          </el-scrollbar>
-          <div class="mt-16">
-            <el-text type="info">{{ $t('theme.defaultTip') }}</el-text>
-          </div>
-        </el-card>
-      </el-card>
     </el-scrollbar>
     <div class="theme-setting__operate w-full p-16-24">
       <el-button @click="resetTheme">{{ $t('theme.abandonUpdate') }}</el-button>
@@ -266,11 +167,11 @@
 
 <script lang="ts" setup>
 import { ref, reactive, onMounted, computed } from 'vue'
-import { useRouter, onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import type { FormInstance, FormRules, UploadFiles } from 'element-plus'
 import { cloneDeep } from 'lodash'
 import LoginPreview from './LoginPreview.vue'
-import { themeList, defaultSetting, defaultPlatformSetting } from '@/utils/theme'
+import { themeList, defaultSetting } from '@/utils/theme'
 import ThemeApi from '@/api/system-settings/theme'
 import { MsgSuccess, MsgError } from '@/utils/message'
 import useStore from '@/stores'
@@ -279,16 +180,11 @@ import { PermissionConst, RoleConst } from '@/utils/permission/data'
 import { ComplexPermission } from '@/utils/permission/type'
 
 const { theme } = useStore()
-const router = useRouter()
-
 onBeforeRouteLeave((to, from) => {
   theme.setTheme(cloneTheme.value)
 })
 
 const themeInfo = computed(() => theme.themeInfo)
-const isDefaultTheme = computed(() => {
-  return theme.isDefaultTheme()
-})
 
 const themeFormRef = ref<FormInstance>()
 const loading = ref(false)
@@ -298,9 +194,8 @@ const themeForm = ref<any>({
   icon: '',
   loginLogo: '',
   loginImage: '',
-  title: 'MaxKB',
+  title: '流光知识库',
   slogan: t('theme.defaultSlogan'),
-  ...defaultPlatformSetting,
 })
 const themeRadio = ref('')
 const customColor = ref('')
@@ -338,20 +233,12 @@ function resetTheme() {
   themeForm.value = cloneDeep(themeInfo.value)
 }
 
-function resetForm(val: string) {
-  themeForm.value =
-    val === 'login'
-      ? {
-          ...themeForm.value,
-          theme: themeForm.value.theme,
-          ...defaultSetting,
-        }
-      : {
-          ...themeForm.value,
-          theme: themeForm.value.theme,
-          ...defaultPlatformSetting,
-        }
-
+function resetForm() {
+  themeForm.value = {
+    ...themeForm.value,
+    theme: themeForm.value.theme,
+    ...defaultSetting,
+  }
   theme.setTheme(themeForm.value)
 }
 
@@ -373,9 +260,6 @@ const updateTheme = async (formEl: FormInstance | undefined, test?: string) => {
 }
 
 onMounted(() => {
-  // if (user.isExpire()) {
-  //   router.push({path: `/application`})
-  // }
   if (themeInfo.value) {
     themeRadio.value = themeList.some((v) => v.value === themeInfo.value.theme)
       ? themeInfo.value.theme

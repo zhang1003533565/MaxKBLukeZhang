@@ -2,13 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${LUMOSKB_ENV_FILE:-$ROOT_DIR/deploy/.env}"
+ENV_FILE="${LIUGUANG_KB_ENV_FILE:-$ROOT_DIR/deploy/.env}"
 ENV_EXAMPLE="$ROOT_DIR/deploy/.env.example"
 COMPOSE_FILE="$ROOT_DIR/deploy/docker-compose.prod.yml"
 DEPLOY_MODE="${DEPLOY_MODE:-local}"
 
 log() {
-  printf '[lumoskb-deploy] %s\n' "$*"
+  printf '[liuguang-kb-deploy] %s\n' "$*"
 }
 
 usage() {
@@ -18,12 +18,12 @@ Usage:
 
 Modes:
   --local    Build image from the current server source, then start services.
-  --pull     Pull LUMOSKB_IMAGE from registry, then start services.
+  --pull     Pull LIUGUANG_KB_IMAGE from registry, then start services.
   --restart  Restart existing services.
   --status   Show service status.
 
 Environment:
-  LUMOSKB_ENV_FILE  Override deploy env file path. Default: deploy/.env
+  LIUGUANG_KB_ENV_FILE  Override deploy env file path. Default: deploy/.env
   DEPLOY_MODE       local | pull | restart | status
 EOF
 }
@@ -117,7 +117,7 @@ set -a
 source "$ENV_FILE"
 set +a
 
-PROJECT="${LUMOSKB_PROJECT:-lumoskb}"
+PROJECT="${LIUGUANG_KB_PROJECT:-liuguang-kb}"
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" -p "$PROJECT")
 
 case "$DEPLOY_MODE" in
@@ -128,7 +128,7 @@ case "$DEPLOY_MODE" in
     "${COMPOSE[@]}" up -d --remove-orphans
     ;;
   pull)
-    log "Pulling image ${LUMOSKB_IMAGE:-ghcr.io/zhang1003533565/lumoskb:latest}..."
+    log "Pulling image ${LIUGUANG_KB_IMAGE:-ghcr.io/zhang1003533565/liuguang-kb:latest}..."
     "${COMPOSE[@]}" pull app
     log "Starting services..."
     "${COMPOSE[@]}" up -d --remove-orphans
@@ -148,5 +148,5 @@ case "$DEPLOY_MODE" in
 esac
 
 log "Deployment finished."
-log "Admin URL: http://<server-ip>:${LUMOSKB_PORT:-8080}/admin"
-log "Default login: admin / ${MAXKB_DEFAULT_PASSWORD:-LumosKB@123..}"
+log "Admin URL: http://<server-ip>:${LIUGUANG_KB_PORT:-8080}/admin"
+log "Default login: admin / ${MAXKB_DEFAULT_PASSWORD:-LiuguangKB@123..}"

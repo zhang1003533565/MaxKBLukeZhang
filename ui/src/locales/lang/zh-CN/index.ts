@@ -9,7 +9,7 @@ import aiChat from './ai-chat'
 import workflow from './workflow'
 import home from './home'
 export default {
-  lang: '简体中文',
+  lang: '中文',
   zhCn,
   views,
   theme,

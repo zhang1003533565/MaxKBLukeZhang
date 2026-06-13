@@ -3,7 +3,7 @@ import ChatAPI from '@/api/chat/chat'
 import type {ChatProfile, ChatUserProfile} from '@/api/type/chat'
 import type {LoginRequest} from '@/api/type/user'
 import type {Ref} from 'vue'
-import {getBrowserLang} from '@/locales/index'
+import {getBrowserLang, normalizeLocale} from '@/locales/index'
 
 interface ChatUser {
   // 用户id
@@ -26,7 +26,7 @@ const useChatUserStore = defineStore('chat-user', {
   }),
   actions: {
     getLanguage() {
-      return localStorage.getItem(`${this.accessToken}-locale`) || getBrowserLang()
+      return normalizeLocale(localStorage.getItem(`${this.accessToken}-locale`) || getBrowserLang())
     },
     setAccessToken(accessToken: string) {
       this.accessToken = accessToken
@@ -46,7 +46,10 @@ const useChatUserStore = defineStore('chat-user', {
     applicationProfile() {
       return ChatAPI.applicationProfile().then((ok) => {
         this.application = ok.data
-        localStorage.setItem(`${this.accessToken}-locale`, ok.data?.language || this.getLanguage())
+        localStorage.setItem(
+          `${this.accessToken}-locale`,
+          normalizeLocale(ok.data?.language || this.getLanguage()),
+        )
       })
     },
     isAuthentication() {

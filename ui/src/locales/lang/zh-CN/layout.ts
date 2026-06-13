@@ -1,7 +1,4 @@
 export default {
-  github: '项目地址',
-  wiki: '用户手册',
-  forum: '论坛求助',
   logout: '退出登录',
   apiKey: 'API Key 管理',
   apiServiceAddress: 'API 服务地址',
@@ -38,7 +35,5 @@ export default {
     neverExpires: '永不过期',
     daysValid: '天有效',
   },
-  copyright: '版权所有 © 2014-2026 杭州飞致云信息科技有限公司',
-  userManualUrl: 'https://maxkb.cn/docs/v2/',
-  forumUrl: 'https://bbs.fit2cloud.com/c/mk/11',
+  copyright: '版权所有 © 2026 流光小队',
 }

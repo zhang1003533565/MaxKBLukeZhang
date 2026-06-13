@@ -183,9 +183,9 @@ import useResize from '@/layout/hooks/useResize'
 import useStore from '@/stores'
 import { useI18n } from 'vue-i18n'
 import QrCodeTab from '@/views/chat/user-login/scanCompinents/QrCodeTab.vue'
-import { MsgConfirm, MsgError } from '@/utils/message.ts'
+import { MsgConfirm } from '@/utils/message.ts'
 import PasswordAuth from '@/views/chat/auth/component/password.vue'
-import { isAppIcon, loadScript } from '@/utils/common'
+import { isAppIcon } from '@/utils/common'
 import * as dd from 'dingtalk-jsapi'
 import JSEncrypt from 'jsencrypt'
 
@@ -441,7 +441,6 @@ onBeforeMount(() => {
     }
   }
 })
-declare const window: any
 onBeforeMount(() => {
   const route = useRoute()
   const currentUrl = ref(route.fullPath)
@@ -464,66 +463,9 @@ onBeforeMount(() => {
     }
   }
 
-  const handleLark = () => {
-    const appId = params.get('appId')
-    const callRequestAuthCode = () => {
-      window.tt?.requestAuthCode({
-        appId: appId,
-        success: (res: any) => {
-          chatUser.larkCallback(res.code, accessToken).then(() => {
-            router.push({
-              name: 'chat',
-              params: { accessToken: accessToken },
-              query: route.query,
-            })
-          })
-        },
-        fail: (error: any) => {
-          MsgError(error)
-        },
-      })
-    }
-
-    loadScript('https://lf-scm-cn.feishucdn.com/lark/op/h5-js-sdk-1.5.44.js', {
-      jsId: 'lark-sdk',
-      forceReload: true,
-    })
-      .then(() => {
-        if (window.tt) {
-          window.tt?.requestAccess({
-            appID: appId,
-            scopeList: [],
-            success: (res: any) => {
-              chatUser.larkCallback(res.code, accessToken).then(() => {
-                router.push({
-                  name: 'chat',
-                  params: { accessToken: accessToken },
-                  query: route.query,
-                })
-              })
-            },
-            fail: (error: any) => {
-              const { errno } = error
-              if (errno === 103) {
-                callRequestAuthCode()
-              }
-            },
-          })
-        } else {
-          callRequestAuthCode()
-        }
-      })
-      .catch((error) => {
-        console.error('SDK 加载失败:', error)
-      })
-  }
-
   switch (client) {
     case 'dingtalk':
       handleDingTalk()
-      break
-    case 'lark':
-      handleLark()
       break
     default:
       break

@@ -509,8 +509,7 @@ export default {
       expression: {
         label: '表达式',
         placeholder: '请输入表达式',
-        tooltip:
-          '请使用 JSON Path 表达式拆分变量，例如：$.store.book <a href="https://pypi.org/project/jsonpath-ng/1.8.0/" target="_blank" class="expression_tip">点击查看详情 ➜ pypi.org</a>',
+        tooltip: '请使用 JSON Path 表达式拆分变量，例如：$.store.book',
       },
     },
     parameterExtractionNode: {

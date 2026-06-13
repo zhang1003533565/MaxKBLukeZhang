@@ -25,4 +25,4 @@ WHERE id = '${MODEL_ID}'
 SQL
 
 echo "Removed the default local embedding model from the development database."
-echo "Add an online embedding model in the MaxKB UI before creating or vectorizing knowledge bases."
+echo "Add an online embedding model in the admin UI before creating or vectorizing knowledge bases."
