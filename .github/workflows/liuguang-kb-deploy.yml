@@ -8,51 +8,68 @@ on:
 
 permissions:
   contents: read
-  packages: write
-
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/liuguang-kb
 
 jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
       image_ref: ${{ steps.image.outputs.image_ref }}
+      node_image: ${{ steps.image.outputs.node_image }}
+      base_image: ${{ steps.image.outputs.base_image }}
+      postgres_image: ${{ steps.image.outputs.postgres_image }}
+      redis_image: ${{ steps.image.outputs.redis_image }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Normalize image name
+      - name: Resolve image names
         id: image
+        shell: bash
         run: |
-          IMAGE_NAME_LOWER="$(echo "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"
-          IMAGE_REF="${IMAGE_NAME_LOWER}:${GITHUB_SHA::12}"
-          echo "image_name=${IMAGE_NAME_LOWER}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          ACR_REGISTRY="${{ vars.ACR_REGISTRY || 'crpi-awzm63dqn5ugddo8.cn-hangzhou.personal.cr.aliyuncs.com' }}"
+          ACR_NAMESPACE="${{ vars.ACR_NAMESPACE || 'lukezhang' }}"
+          APP_IMAGE_NAME="${{ vars.ACR_APP_IMAGE_NAME || 'liuguang-kb' }}"
+          IMAGE_NAME="${ACR_REGISTRY}/${ACR_NAMESPACE}/${APP_IMAGE_NAME}"
+          IMAGE_REF="${IMAGE_NAME}:${GITHUB_SHA::12}"
+          IMAGE_LATEST="${IMAGE_NAME}:latest"
+
+          echo "registry=${ACR_REGISTRY}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+          echo "image_latest=${IMAGE_LATEST}" >> "$GITHUB_OUTPUT"
+          echo "node_image=${ACR_REGISTRY}/${ACR_NAMESPACE}/node:24-alpine" >> "$GITHUB_OUTPUT"
+          echo "base_image=${ACR_REGISTRY}/${ACR_NAMESPACE}/maxkb-base:python3.11-pg17.10-20260525-amd64" >> "$GITHUB_OUTPUT"
+          echo "postgres_image=${ACR_REGISTRY}/${ACR_NAMESPACE}/pgvector:pg17" >> "$GITHUB_OUTPUT"
+          echo "redis_image=${ACR_REGISTRY}/${ACR_NAMESPACE}/redis:7-alpine" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
+      - name: Login to Alibaba Cloud ACR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ steps.image.outputs.registry }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: installer/Dockerfile
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ steps.image.outputs.image_ref }}
-            ${{ steps.image.outputs.image_name }}:latest
+            ${{ steps.image.outputs.image_latest }}
           build-args: |
             DOCKER_IMAGE_TAG=${{ github.ref_name }}
             BUILD_AT=${{ github.run_id }}
             GITHUB_COMMIT=${{ github.sha }}
+            NODE_IMAGE=${{ steps.image.outputs.node_image }}
+            MAXKB_BASE_IMAGE=${{ steps.image.outputs.base_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     needs: build
@@ -65,20 +82,53 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          port: ${{ secrets.SERVER_PORT || '22' }}
+          port: ${{ vars.SERVER_PORT || '22' }}
           script_stop: true
           script: |
             set -euo pipefail
             DEPLOY_PATH="${{ vars.SERVER_DEPLOY_PATH || '/opt/liuguang-kb' }}"
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
+              mkdir -p "$(dirname "$DEPLOY_PATH")"
+              git clone "$REPO_URL" "$DEPLOY_PATH"
+            fi
+
             cd "$DEPLOY_PATH"
+
+            git remote set-url origin "$REPO_URL"
             git fetch origin main
             git reset --hard "${{ github.sha }}"
+
             if [ ! -f deploy/.env ]; then
               cp deploy/.env.example deploy/.env
             fi
-            if grep -q '^LIUGUANG_KB_IMAGE=' deploy/.env; then
-              sed -i.bak 's|^LIUGUANG_KB_IMAGE=.*|LIUGUANG_KB_IMAGE=${{ needs.build.outputs.image_ref }}|' deploy/.env
-            else
-              printf '\nLIUGUANG_KB_IMAGE=%s\n' '${{ needs.build.outputs.image_ref }}' >> deploy/.env
-            fi
+
+            set_env_value() {
+              key="$1"
+              value="$2"
+              tmp="$(mktemp)"
+              awk -v key="$key" -v value="$value" '
+                BEGIN { found = 0 }
+                $0 ~ "^" key "=" {
+                  print key "=" value
+                  found = 1
+                  next
+                }
+                { print }
+                END {
+                  if (found == 0) {
+                    print key "=" value
+                  }
+                }
+              ' deploy/.env > "$tmp"
+              mv "$tmp" deploy/.env
+            }
+
+            set_env_value LIUGUANG_KB_IMAGE '${{ needs.build.outputs.image_ref }}'
+            set_env_value LIUGUANG_KB_NODE_IMAGE '${{ needs.build.outputs.node_image }}'
+            set_env_value LIUGUANG_KB_BASE_IMAGE '${{ needs.build.outputs.base_image }}'
+            set_env_value LIUGUANG_KB_POSTGRES_IMAGE '${{ needs.build.outputs.postgres_image }}'
+            set_env_value LIUGUANG_KB_REDIS_IMAGE '${{ needs.build.outputs.redis_image }}'
+
             DEPLOY_MODE=pull ./scripts/server-deploy.sh

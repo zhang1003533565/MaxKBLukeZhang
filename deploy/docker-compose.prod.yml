@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg17
+    image: ${LIUGUANG_KB_POSTGRES_IMAGE:-pgvector/pgvector:pg17}
     container_name: ${LIUGUANG_KB_PROJECT:-liuguang-kb}-postgres
     restart: unless-stopped
     environment:
@@ -19,7 +19,7 @@ services:
       retries: 30
 
   redis:
-    image: redis:7-alpine
+    image: ${LIUGUANG_KB_REDIS_IMAGE:-redis:7-alpine}
     container_name: ${LIUGUANG_KB_PROJECT:-liuguang-kb}-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -38,6 +38,8 @@ services:
       dockerfile: installer/Dockerfile
       args:
         DOCKER_IMAGE_TAG: ${MAXKB_VERSION:-liuguang-kb-server}
+        NODE_IMAGE: ${LIUGUANG_KB_NODE_IMAGE:-node:24-alpine}
+        MAXKB_BASE_IMAGE: ${LIUGUANG_KB_BASE_IMAGE:-ghcr.io/1panel-dev/maxkb-base:python3.11-pg17.10-20260525}
     container_name: ${LIUGUANG_KB_PROJECT:-liuguang-kb}-app
     restart: unless-stopped
     depends_on:

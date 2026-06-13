@@ -34,6 +34,10 @@ const renameHtmlPlugin = (outDir: string, entry: string) => {
 export default defineConfig((conf: any) => {
   const mode = conf.mode
   const ENV = loadEnv(mode, envDir)
+  const isChatMode = mode === 'chat'
+  const entry = ENV.VITE_ENTRY || (isChatMode ? 'chat.html' : 'admin.html')
+  const basePath = ENV.VITE_BASE_PATH || (isChatMode ? '/chat/' : '/admin/')
+  const appPort = ENV.VITE_APP_PORT || (isChatMode ? '3001' : '3000')
   const proxyConf: Record<string, string | ProxyOptions> = {}
   proxyConf['/admin/api'] = {
     target: 'http://127.0.0.1:8080',
@@ -50,38 +54,38 @@ export default defineConfig((conf: any) => {
   proxyConf['/doc'] = {
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
-    rewrite: (path: string) => path.replace(ENV.VITE_BASE_PATH, '/'),
+    rewrite: (path: string) => path.replace(basePath, '/'),
   }
   proxyConf['/schema'] = {
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
-    rewrite: (path: string) => path.replace(ENV.VITE_BASE_PATH, '/'),
+    rewrite: (path: string) => path.replace(basePath, '/'),
   }
   proxyConf['/static'] = {
     target: 'http://127.0.0.1:8080',
     changeOrigin: true,
-    rewrite: (path: string) => path.replace(ENV.VITE_BASE_PATH, '/'),
+    rewrite: (path: string) => path.replace(basePath, '/'),
   }
 
   // 前端静态资源转发到本身
-  proxyConf[`^${ENV.VITE_BASE_PATH}.+\/oss\/file\/.*$`] = {
+  proxyConf[`^${basePath}.+\/oss\/file\/.*$`] = {
     target: `http://127.0.0.1:8080`,
     changeOrigin: true,
   }
   // 前端静态资源转发到本身
-  proxyConf[`^${ENV.VITE_BASE_PATH}oss\/file\/.*$`] = {
+  proxyConf[`^${basePath}oss\/file\/.*$`] = {
     target: `http://127.0.0.1:8080`,
     changeOrigin: true,
   }
-  proxyConf[`^${ENV.VITE_BASE_PATH}oss\/get_url\/.*$`] = {
+  proxyConf[`^${basePath}oss\/get_url\/.*$`] = {
     target: `http://127.0.0.1:8080`,
     changeOrigin: true,
   }
   // 前端静态资源转发到本身
-  proxyConf[ENV.VITE_BASE_PATH] = {
-    target: `http://127.0.0.1:${ENV.VITE_APP_PORT}`,
+  proxyConf[basePath] = {
+    target: `http://127.0.0.1:${appPort}`,
     changeOrigin: true,
-    rewrite: (path: string) => path.replace(ENV.VITE_BASE_PATH, '/'),
+    rewrite: (path: string) => path.replace(basePath, '/'),
   }
 
   return {
@@ -93,21 +97,21 @@ export default defineConfig((conf: any) => {
       vue(),
       vueJsx(),
       DefineOptions(),
-      createHtmlPlugin({template: ENV.VITE_ENTRY}),
-      renameHtmlPlugin(`dist${ENV.VITE_BASE_PATH}`, ENV.VITE_ENTRY),
+      createHtmlPlugin({template: entry}),
+      renameHtmlPlugin(`dist${basePath}`, entry),
     ],
     server: {
       cors: true,
       host: '0.0.0.0',
-      port: Number(ENV.VITE_APP_PORT),
+      port: Number(appPort),
       strictPort: true,
       proxy: proxyConf,
     },
     build: {
-      outDir: `dist${ENV.VITE_BASE_PATH}`,
+      outDir: `dist${basePath}`,
       target: 'es2022',
       rollupOptions: {
-        input: ENV.VITE_ENTRY,
+        input: entry,
       },
     },
     resolve: {
