@@ -52,6 +52,7 @@ class DeepSeekModelProvider(IModelProvider):
                     "deepseek_model_provider",
                     "icon",
                     "deepseek_icon_svg",
-                )
+                ),
+                default="",
             ),
         )

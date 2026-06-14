@@ -76,6 +76,12 @@ class XunFeiModelProvider(IModelProvider):
         return model_info_manage
 
     def get_model_provide_info(self):
-        return ModelProvideInfo(provider='model_xf_provider', name=_('讯飞星火'), icon=get_file_content(
-            os.path.join(PROJECT_DIR, "apps", 'models_provider', 'impl', 'xf_model_provider', 'icon',
-                         'xf_icon_svg')))
+        return ModelProvideInfo(
+            provider='model_xf_provider',
+            name=_('讯飞星火'),
+            icon=get_file_content(
+                os.path.join(PROJECT_DIR, "apps", 'models_provider', 'impl', 'xf_model_provider', 'icon',
+                             'xf_icon_svg'),
+                default="",
+            ),
+        )

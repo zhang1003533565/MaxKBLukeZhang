@@ -261,6 +261,7 @@ class AliyunBaiLianModelProvider(IModelProvider):
                     "aliyun_bai_lian_model_provider",
                     "icon",
                     "aliyun_bai_lian_icon_svg",
-                )
+                ),
+                default="",
             ),
         )

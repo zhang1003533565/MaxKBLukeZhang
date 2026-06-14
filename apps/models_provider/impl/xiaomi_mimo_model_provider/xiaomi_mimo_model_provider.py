@@ -50,6 +50,7 @@ class XiaomiMiMoModelProvider(IModelProvider):
                     "xiaomi_mimo_model_provider",
                     "icon",
                     "xiaomi_mimo_icon_svg",
-                )
+                ),
+                default="",
             ),
         )

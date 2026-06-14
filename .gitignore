@@ -185,6 +185,14 @@ data
 poetry.lock
 uv.lock
 apps/models_provider/impl/*/icon/
+!apps/models_provider/impl/aliyun_bai_lian_model_provider/icon/
+!apps/models_provider/impl/aliyun_bai_lian_model_provider/icon/**
+!apps/models_provider/impl/deepseek_model_provider/icon/
+!apps/models_provider/impl/deepseek_model_provider/icon/**
+!apps/models_provider/impl/xiaomi_mimo_model_provider/icon/
+!apps/models_provider/impl/xiaomi_mimo_model_provider/icon/**
+!apps/models_provider/impl/xf_model_provider/icon/
+!apps/models_provider/impl/xf_model_provider/icon/**
 apps/models_provider/impl/tencent_model_provider/credential/stt.py
 apps/models_provider/impl/tencent_model_provider/model/stt.py
 tmp/

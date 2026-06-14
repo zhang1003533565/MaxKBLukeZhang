@@ -183,10 +183,18 @@ def markdown_to_plain_text(md: str) -> str:
     return text
 
 
-def get_file_content(path):
-    with open(path, "r", encoding='utf-8') as file:
-        content = file.read()
-    return content
+_FILE_CONTENT_MISSING = object()
+
+
+def get_file_content(path, default=_FILE_CONTENT_MISSING):
+    try:
+        with open(path, "r", encoding='utf-8') as file:
+            content = file.read()
+        return content
+    except FileNotFoundError:
+        if default is not _FILE_CONTENT_MISSING:
+            return default
+        raise
 
 
 def sub_array(array: List, item_num=10):
