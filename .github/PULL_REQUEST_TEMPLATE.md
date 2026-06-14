@@ -5,5 +5,5 @@
 #### Please indicate you've done the following:
 
 - [ ] Made sure tests are passing and test coverage is added if needed.
-- [ ] Made sure commit message follow the rule of [Conventional Commits specification](https://www.conventionalcommits.org/).
+- [ ] Made sure commit message follows the repository commit message rule.
 - [ ] Considered the docs impact and opened a new docs issue or PR with docs changes if needed.

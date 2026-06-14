@@ -5,13 +5,13 @@ Google 搜索工具是一个实时 API，可提取搜索引擎结果，提供来
 ## 配置
 
 1. 创建 Google Custom Search Engine
-在[Programmable Search Engine](https://programmablesearchengine.google.com/)中 添加 Search Engine
+在 Google Programmable Search Engine 控制台中添加 Search Engine。
 ![google 创建引擎](/admin/tool/img/google_AddSearchEngine.jpg)
 2. 获取cx参数
 进入添加的引擎详情中，在【基本】菜单中获取搜索引擎的ID，即cx。
 ![google cx ](/admin/tool/img/google_cx.jpg)
 3. 获取 API Key
-打开 https://developers.google.com/custom-search/v1/overview?hl=zh-cn 获取API Key。
+在 Google Custom Search API 控制台中获取 API Key。
 ![google API Key](/admin/tool/img/google_APIKey.jpg)
 4. 配置启动参数
 在Google 搜索函数的启动参数中填写配置以上参数，并启用该函数。

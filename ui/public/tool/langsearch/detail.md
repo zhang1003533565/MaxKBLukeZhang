@@ -5,8 +5,8 @@ LangSearch 是一个提供免费Web Search API和Rerank API的服务，支持新
 
 ## 配置
 
-1. 获取API Key 
-在[LangSearch](https://langsearch.com/overview) 上申请 API 密钥。
+1. 获取API Key
+在 LangSearch 控制台申请 API 密钥。
 ![API Key](/admin/tool/img/langsearch_APIKey.jpg)
 2. 在函数库中配置
 在函数库的LangSearch函数面板中，点击 … > 启动参数，填写 API 密钥，并启用该函数。   

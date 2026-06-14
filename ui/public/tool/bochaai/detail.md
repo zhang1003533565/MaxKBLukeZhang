@@ -5,8 +5,8 @@
 
 ## 配置
 
-1. 获取API Key 
-在[博查开放平台](https://open.bochaai.com/overview) 上申请 API 密钥。
+1. 获取API Key
+在博查开放平台控制台申请 API 密钥。
 ![API Key](/admin/tool/img/bocha_APIKey.jpg)
 2. 在函数库中配置
 在函数库的博查函数面板中，点击 … > 启动参数，填写 API 密钥，并启用该函数。   
