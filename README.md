@@ -25,10 +25,18 @@
 
 ## 本地开发
 
-推荐一条命令启动开发环境：
+推荐一条命令启动开发环境。
+
+macOS / Linux：
 
 ```bash
 ./scripts/dev-all.sh
+```
+
+Windows PowerShell：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-all.ps1
 ```
 
 启动后访问：
@@ -36,7 +44,7 @@
 - 管理端：http://localhost:3000/admin
 - 后端：http://localhost:8080
 
-本地开发只保留这一条启动入口。它会自动拉起 PostgreSQL、Redis、后端、任务队列和前端。
+本地开发只保留这一组同名启动入口。脚本会自动拉起 PostgreSQL、Redis、后端、任务队列和前端。
 
 代码校验：
 

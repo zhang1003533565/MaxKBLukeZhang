@@ -5,8 +5,14 @@
 常用命令：
 
 ```bash
-./scripts/dev-all.sh              # 本地开发一键启动
+./scripts/dev-all.sh              # macOS / Linux 本地开发一键启动
 ./scripts/server-deploy.sh        # 服务器本地构建并部署
 ./scripts/server-deploy.sh --pull # 服务器拉取镜像并部署
 ./scripts/validate-code-rules.sh  # 代码规则校验
+```
+
+Windows PowerShell 本地开发：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-all.ps1
 ```

@@ -20,7 +20,7 @@ fi
 
 run_shell_checks() {
   local files
-  files="$(printf '%s\n' "$CHANGED_FILES" | grep -E '(^scripts/.*|\.sh$)' || true)"
+  files="$(printf '%s\n' "$CHANGED_FILES" | grep -E '\.sh$' || true)"
   if [ -z "$files" ]; then
     return
   fi
@@ -29,6 +29,32 @@ run_shell_checks() {
   while IFS= read -r file; do
     if [ -f "$file" ]; then
       bash -n "$file"
+    fi
+  done <<< "$files"
+}
+
+run_powershell_checks() {
+  local files pwsh_cmd
+  files="$(printf '%s\n' "$CHANGED_FILES" | grep -E '\.ps1$' || true)"
+  if [ -z "$files" ]; then
+    return
+  fi
+
+  if command -v pwsh >/dev/null 2>&1; then
+    pwsh_cmd="pwsh"
+  elif command -v powershell >/dev/null 2>&1; then
+    pwsh_cmd="powershell"
+  else
+    echo "[code-rules] Skip PowerShell syntax checks: pwsh/powershell not found."
+    return
+  fi
+
+  echo "[code-rules] Checking PowerShell scripts..."
+  while IFS= read -r file; do
+    if [ -f "$file" ]; then
+      "$pwsh_cmd" -NoProfile -NonInteractive -Command \
+        '$path = $args[0]; [scriptblock]::Create((Get-Content -Raw -LiteralPath $path)) | Out-Null' \
+        "$file"
     fi
   done <<< "$files"
 }
@@ -94,6 +120,7 @@ run_frontend_checks() {
 }
 
 run_shell_checks
+run_powershell_checks
 run_python_checks
 run_frontend_checks
 
