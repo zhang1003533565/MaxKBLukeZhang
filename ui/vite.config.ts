@@ -109,6 +109,7 @@ export default defineConfig((conf: any) => {
     },
     build: {
       outDir: `dist${basePath}`,
+      emptyOutDir: false,
       target: 'es2022',
       rollupOptions: {
         input: entry,

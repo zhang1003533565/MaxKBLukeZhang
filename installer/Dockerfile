@@ -2,10 +2,11 @@ ARG NODE_IMAGE=node:24-alpine
 ARG MAXKB_BASE_IMAGE=ghcr.io/1panel-dev/maxkb-base:python3.11-pg17.10-20260525
 FROM ${NODE_IMAGE} AS web-build
 COPY ui ui
-RUN cd ui && ls -la && if [ -d "dist" ]; then exit 0; fi && \
+RUN cd ui && ls -la && if [ -d "dist/admin" ] && [ -d "dist/chat" ]; then exit 0; fi && \
     npm install --prefer-offline --no-audit && \
-    npm install -D concurrently && \
-    NODE_OPTIONS="--max-old-space-size=4096" npx concurrently "npm run build" "npm run build-chat" && \
+    rm -rf dist && \
+    NODE_OPTIONS="--max-old-space-size=4096" npm run build-only && \
+    NODE_OPTIONS="--max-old-space-size=4096" npm run build-chat && \
     find . -maxdepth 1 ! -name '.' ! -name 'dist' ! -name 'public' -exec rm -rf {} +
 
 FROM ${MAXKB_BASE_IMAGE} AS stage-build
