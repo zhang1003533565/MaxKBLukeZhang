@@ -8,6 +8,7 @@
 """
 import os
 import subprocess
+import sys
 
 from django.core.management.base import BaseCommand
 
@@ -31,6 +32,8 @@ class Command(BaseCommand):
         if not server_hostname:
             server_hostname = '%h'
         cmd = [
+            sys.executable,
+            '-m',
             'celery',
             '-A', 'ops',
             'worker',
@@ -43,4 +46,4 @@ class Command(BaseCommand):
             '--without-mingle',
         ]
         kwargs = {'cwd': BASE_DIR}
-        subprocess.run(cmd, **kwargs)
+        subprocess.run(cmd, check=True, **kwargs)
