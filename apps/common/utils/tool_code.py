@@ -5,9 +5,7 @@ import getpass
 import gzip
 import json
 import os
-import pwd
 import random
-import resource
 import socket
 import subprocess
 import sys
@@ -22,6 +20,14 @@ from maxkb.const import BASE_DIR, CONFIG, PROJECT_DIR
 
 from common.utils.logger import maxkb_logger
 
+_IS_LINUX = sys.platform.startswith("linux")
+_IS_POSIX = os.name == "posix"  # Linux + macOS
+# pwd and resource are POSIX modules available on both Linux and macOS.
+# Import them behind a POSIX guard so the module is importable on Windows.
+if _IS_POSIX:
+    import pwd
+    import resource
+
 _enable_sandbox = bool(int(CONFIG.get("SANDBOX", 0)))
 _run_user = "sandbox" if _enable_sandbox else getpass.getuser()
 _sandbox_path = (
@@ -32,8 +38,11 @@ _sandbox_path = (
 _sandbox_python_sys_path = CONFIG.get_sandbox_python_package_paths().split(",")
 _process_limit_timeout_seconds = int(CONFIG.get("SANDBOX_PYTHON_PROCESS_LIMIT_TIMEOUT_SECONDS", "3600"))
 _process_limit_cpu_cores = (
-    min(max(int(CONFIG.get("SANDBOX_PYTHON_PROCESS_LIMIT_CPU_CORES", "1")), 1), len(os.sched_getaffinity(0)))
-    if sys.platform.startswith("linux")
+    min(
+        max(int(CONFIG.get("SANDBOX_PYTHON_PROCESS_LIMIT_CPU_CORES", "1")), 1),
+        len(os.sched_getaffinity(0)),
+    )
+    if sys.platform.startswith("linux") and hasattr(os, "sched_getaffinity")
     else os.cpu_count()
 )  # 只支持linux，window和mac不支持
 _process_limit_mem_mb = int(CONFIG.get("SANDBOX_PYTHON_PROCESS_LIMIT_MEM_MB", "256"))
@@ -105,7 +114,7 @@ class ToolExecutor:
         )
         set_run_user = (
             f"os.setgid({pwd.getpwnam(_run_user).pw_gid});os.setuid({pwd.getpwnam(_run_user).pw_uid});"
-            if _enable_sandbox
+            if _enable_sandbox and _IS_POSIX
             else ""
         )
         _exec_code = f"""
@@ -304,7 +313,7 @@ sys.stdout.flush()
         code = self._generate_mcp_server_code(code_str, params, name, description, tool_id)
         set_run_user = (
             f"os.setgid({pwd.getpwnam(_run_user).pw_gid});os.setuid({pwd.getpwnam(_run_user).pw_uid});"
-            if _enable_sandbox
+            if _enable_sandbox and _IS_POSIX
             else ""
         )
         return f"""
@@ -324,6 +333,9 @@ exec({dedent(code)!a})
         _code = self.generate_mcp_server_code(tool.code, params, tool.name, tool.desc, str(tool.id))
         maxkb_logger.debug(f"Python code of mcp tool: {_code}")
         compressed_and_base64_encoded_code_str = base64.b64encode(gzip.compress(_code.encode())).decode()
+        tool_env = {}
+        if _enable_sandbox and _IS_LINUX:
+            tool_env["LD_PRELOAD"] = f"{_sandbox_path}/lib/sandbox.so"
         tool_config = {
             "command": sys.executable,
             "args": [
@@ -331,9 +343,7 @@ exec({dedent(code)!a})
                 f"import base64,gzip; exec(gzip.decompress(base64.b64decode('{compressed_and_base64_encoded_code_str}')).decode())",
             ],
             "cwd": _sandbox_path,
-            "env": {
-                "LD_PRELOAD": f"{_sandbox_path}/lib/sandbox.so",
-            },
+            "env": tool_env,
             "transport": "stdio",
         }
         return tool_config
@@ -349,21 +359,25 @@ exec({dedent(code)!a})
         return app_config
 
     def _exec(self, execute_file, _id):
+        sub_env = {"_ID": _id}
+        if _enable_sandbox and _IS_LINUX:
+            sub_env["LD_PRELOAD"] = f"{_sandbox_path}/lib/sandbox.so"
         kwargs = {
             "cwd": BASE_DIR,
-            "env": {
-                "LD_PRELOAD": f"{_sandbox_path}/lib/sandbox.so",
-                "_ID": _id,
-            },
+            "env": sub_env,
         }
 
         def _set_resource_limit():
-            if not _enable_sandbox or not sys.platform.startswith("linux"):
+            if not _enable_sandbox or not _IS_POSIX:
                 return
             with suppress(Exception):
                 resource.setrlimit(resource.RLIMIT_AS, (_process_limit_mem_mb * 1024 * 1024,) * 2)
-            with suppress(Exception):
-                os.sched_setaffinity(0, set(random.sample(list(os.sched_getaffinity(0)), _process_limit_cpu_cores)))
+            if _IS_LINUX:
+                with suppress(Exception):
+                    os.sched_setaffinity(0, set(random.sample(list(os.sched_getaffinity(0)), _process_limit_cpu_cores)))
+
+        if _IS_POSIX:
+            kwargs["preexec_fn"] = _set_resource_limit
 
         try:
             subprocess_result = subprocess.run(
@@ -372,7 +386,6 @@ exec({dedent(code)!a})
                 text=True,
                 capture_output=True,
                 **kwargs,
-                preexec_fn=_set_resource_limit,
             )
             return subprocess_result
         except subprocess.TimeoutExpired:
