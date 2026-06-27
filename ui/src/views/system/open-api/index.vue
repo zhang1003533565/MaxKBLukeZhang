@@ -159,6 +159,36 @@
               <el-button>{{ $t('views.system.knowledgeOpenAPI.selectFile') }}</el-button>
             </el-upload>
           </el-form-item>
+          <el-form-item
+            v-if="testType === 'upload'"
+            :label="$t('views.system.knowledgeOpenAPI.splitStrategy')"
+          >
+            <el-select
+              v-model="form.splitStrategy"
+              class="w-full"
+              :placeholder="$t('views.system.knowledgeOpenAPI.splitStrategyPlaceholder')"
+              clearable
+            >
+              <el-option
+                :label="$t('views.system.knowledgeOpenAPI.splitStrategyDefault')"
+                value=""
+              />
+              <el-option
+                :label="$t('views.system.knowledgeOpenAPI.splitStrategyLlmText')"
+                value="llm_text"
+              />
+              <el-option
+                :label="$t('views.system.knowledgeOpenAPI.splitStrategyLlmVision')"
+                value="llm_vision"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item
+            v-if="testType === 'upload' && isModelSplitStrategy(form.splitStrategy)"
+            :label="$t('views.system.knowledgeOpenAPI.modelId')"
+          >
+            <el-input v-model="form.modelId" clearable />
+          </el-form-item>
         </el-form>
         <el-button class="w-full" type="primary" @click="testAPI" :loading="testLoading">
           {{ $t('views.system.knowledgeOpenAPI.sendTest') }}
@@ -190,6 +220,7 @@ interface OpenAPIKeyItem {
 }
 type EndpointMethod = 'GET' | 'POST'
 type TestType = 'knowledges' | 'knowledgeDetail' | 'documents' | 'paragraphs' | 'hitTest' | 'upload'
+type SplitStrategy = '' | 'llm_text' | 'llm_vision'
 interface EndpointItem {
   value: TestType
   method: EndpointMethod
@@ -209,6 +240,8 @@ const form = reactive({
   documentId: '',
   knowledgeIds: '',
   queryText: '',
+  splitStrategy: '' as SplitStrategy,
+  modelId: '',
 })
 
 const workspaceId = computed(() => user.getWorkspaceId() || 'default')
@@ -246,7 +279,11 @@ const endpoints = computed<EndpointItem[]>(() => [
     method: 'POST',
     path: `${baseUrl.value}/knowledges/{knowledge_id}/documents/upload`,
     description: t('views.system.knowledgeOpenAPI.docs.upload'),
-    example: `curl -X POST -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" -F "file=@demo.docx" "${baseUrl.value}/knowledges/{knowledge_id}/documents/upload"`,
+    example: `curl -X POST -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" \\
+  -F "file=@demo.docx" \\
+  -F "split_strategy=llm_vision" \\
+  -F "model_id=<vision_model_id>" \\
+  "${baseUrl.value}/knowledges/{knowledge_id}/documents/upload"`,
   },
   {
     value: 'paragraphs',
@@ -284,6 +321,10 @@ function getMethodTagType(method: EndpointMethod): TagProps['type'] {
 function selectEndpoint(value: TestType) {
   testType.value = value
   testResult.value = ''
+}
+
+function isModelSplitStrategy(strategy: string) {
+  return ['llm_text', 'llm_vision'].includes(strategy)
 }
 
 function syncSelectedKey() {
@@ -363,6 +404,10 @@ function testAPI() {
     MsgError(t('views.system.knowledgeOpenAPI.selectFile'))
     return
   }
+  if (testType.value === 'upload' && isModelSplitStrategy(form.splitStrategy) && !form.modelId) {
+    MsgError(t('views.system.knowledgeOpenAPI.modelIdRequired'))
+    return
+  }
   testLoading.value = true
   const url = buildTestUrl()
   const request =
@@ -397,6 +442,12 @@ function uploadTest(url: string) {
   const formData = new FormData()
   if (uploadFile.value) {
     formData.append('file', uploadFile.value)
+  }
+  if (form.splitStrategy) {
+    formData.append('split_strategy', form.splitStrategy)
+  }
+  if (isModelSplitStrategy(form.splitStrategy) && form.modelId) {
+    formData.append('model_id', form.modelId)
   }
   return OpenAPI.uploadDocument(url, selectedKey.value, formData)
 }

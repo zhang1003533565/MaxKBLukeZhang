@@ -231,15 +231,18 @@ module_info_itv_list = [
 knowledge_reranker_model_info_list = [model_info_list[0]]
 knowledge_embedding_model_info_list = model_info_list[3:8]
 knowledge_llm_model_info_list = model_info_list[8:14]
+knowledge_image_model_info_list = module_info_vl_list
 
 model_info_manage = (
     ModelInfoManage.builder()
     .append_model_info_list(knowledge_llm_model_info_list)
     .append_model_info_list(knowledge_embedding_model_info_list)
     .append_model_info_list(knowledge_reranker_model_info_list)
+    .append_model_info_list(knowledge_image_model_info_list)
     .append_default_model_info(knowledge_llm_model_info_list[0])
     .append_default_model_info(knowledge_embedding_model_info_list[0])
     .append_default_model_info(knowledge_reranker_model_info_list[0])
+    .append_default_model_info(knowledge_image_model_info_list[0])
     .build()
 )
 

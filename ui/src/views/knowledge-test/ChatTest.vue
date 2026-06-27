@@ -381,7 +381,6 @@ async function sendStreamMessage(payload: ReturnType<typeof buildChatPayload>, a
         throw new Error(String(data))
       }
     })
-    scrollToBottom()
   }
 
   const parsed = parseStreamEvents(buffer)
@@ -451,7 +450,6 @@ async function sendMessage(event?: KeyboardEvent | MouseEvent) {
   } finally {
     finishAssistantLoading(assistantIndex)
     loading.value = false
-    scrollToBottom()
   }
 }
 
