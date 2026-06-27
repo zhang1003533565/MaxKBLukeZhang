@@ -1,7 +1,10 @@
+import os
+import sys
+
 from django.conf import settings
 
 from .base import BaseService
-from ..hands import *
+from ..hands import APPS_DIR
 
 
 class CeleryBaseService(BaseService):
@@ -27,6 +30,8 @@ class CeleryBaseService(BaseService):
             server_hostname = '%h'
 
         cmd = [
+            sys.executable,
+            '-m',
             'celery',
             '-A', 'ops',
             'worker',
