@@ -98,6 +98,14 @@ export default {
     checkedConnect: {
       label: 'Add "Related Questions" section for question-based QA pairs during import.',
     },
+    progress: {
+      uploading: 'Uploading document',
+      parsing: 'Upload complete, parsing segments',
+      ready: 'Draft ready',
+      failed: 'Processing failed. Please generate the preview again.',
+      files: 'Files: ',
+      draft: 'The current upload draft is preserved.',
+    },
   },
   buttons: {
     import: 'Start Import',

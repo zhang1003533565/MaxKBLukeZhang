@@ -102,7 +102,7 @@
             </el-checkbox>
           </div>
           <div class="text-right mt-8">
-            <el-button @click="splitDocument">
+            <el-button @click="splitDocument" :disabled="loading">
               {{ $t('views.document.buttons.preview') }}</el-button
             >
           </div>
@@ -110,9 +110,19 @@
       </el-col>
 
       <el-col :span="14" class="p-24 border-l">
-        <div v-loading="loading">
-          <h4 class="title-decoration-1 mb-8">{{ $t('views.document.setRules.title.preview') }}</h4>
+        <h4 class="title-decoration-1 mb-8">{{ $t('views.document.setRules.title.preview') }}</h4>
+        <div v-if="currentDraft" class="upload-progress mb-16">
+          <div class="flex-between mb-8">
+            <span class="bolder">{{ progressTitle }}</span>
+            <el-text type="info" size="small">{{ draftProgress }}%</el-text>
+          </div>
+          <el-progress :percentage="draftProgress" :status="progressStatus" />
+          <el-text type="info" size="small" class="upload-progress__tip">
+            {{ progressTip }}
+          </el-text>
+        </div>
 
+        <div v-loading="loading">
           <ParagraphPreview v-model:data="paragraphList" :isConnect="checkedConnect" :knowledge-id="id"/>
         </div>
       </el-col>
@@ -127,6 +137,9 @@ import { cutFilename } from '@/utils/common'
 import useStore from '@/stores'
 import type { KeyValue } from '@/api/type/common'
 import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
+import { t } from '@/locales'
+import type { UploadProgressHandler } from '@/request/index'
+import type { DocumentUploadDraft } from '@/stores/modules/knowledge'
 const { knowledge } = useStore()
 const documentsFiles = computed(() => knowledge.documentsFiles)
 const splitPatternList = ref<Array<KeyValue<string, string>>>([])
@@ -150,6 +163,42 @@ const loading = ref(false)
 const paragraphList = ref<any[]>([])
 const patternLoading = ref<boolean>(false)
 const checkedConnect = ref<boolean>(false)
+const draftKey = computed(() => String(id || ''))
+const currentDraft = computed(() => {
+  return knowledge.documentUploadDraft?.key === draftKey.value ? knowledge.documentUploadDraft : null
+})
+const draftProgress = computed(() => currentDraft.value?.progress || 0)
+const progressStatus = computed(() => {
+  if (currentDraft.value?.status === 'ready') {
+    return 'success'
+  }
+  if (currentDraft.value?.status === 'failed') {
+    return 'exception'
+  }
+  return undefined
+})
+const progressTitle = computed(() => {
+  const status = currentDraft.value?.status
+  if (status === 'uploading') {
+    return t('views.document.setRules.progress.uploading')
+  }
+  if (status === 'parsing') {
+    return t('views.document.setRules.progress.parsing')
+  }
+  if (status === 'ready') {
+    return t('views.document.setRules.progress.ready')
+  }
+  if (status === 'failed') {
+    return t('views.document.setRules.progress.failed')
+  }
+  return ''
+})
+const progressTip = computed(() => {
+  const fileNames = currentDraft.value?.fileNames || []
+  return fileNames.length > 0
+    ? `${t('views.document.setRules.progress.files')}${fileNames.join('、')}`
+    : t('views.document.setRules.progress.draft')
+})
 
 const firstChecked = ref(true)
 
@@ -181,11 +230,66 @@ function changeHandle(val: boolean) {
     }))
     firstChecked.value = false
   }
+  knowledge.patchDocumentUploadDraft({
+    checkedConnect: val,
+    paragraphList: paragraphList.value,
+  })
 }
+
+function patchDraftConfig() {
+  knowledge.patchDocumentUploadDraft({
+    checkedConnect: checkedConnect.value,
+    radio: radio.value,
+    form: {
+      patterns: [...form.patterns],
+      limit: form.limit,
+      with_filter: form.with_filter,
+    },
+  })
+}
+
+function applyDraft(draft: DocumentUploadDraft | null) {
+  if (!draft || draft.key !== draftKey.value) {
+    return
+  }
+  radio.value = draft.radio || '1'
+  form.patterns = [...(draft.form?.patterns || [])]
+  form.limit = draft.form?.limit || 500
+  form.with_filter = draft.form?.with_filter ?? true
+  checkedConnect.value = Boolean(draft.checkedConnect)
+  paragraphList.value = draft.paragraphList || []
+  loading.value = draft.status === 'uploading' || draft.status === 'parsing'
+}
+
+function postParagraphList(list: any[]) {
+  list.map((item: any) => {
+    if (item.name.length > 128) {
+      item.name = cutFilename(item.name, 128)
+    }
+    if (checkedConnect.value) {
+      item.content.map((v: any) => {
+        v['problem_list'] = v.title.trim()
+          ? [
+              {
+                content: v.title.trim(),
+              },
+            ]
+          : []
+      })
+    }
+  })
+  return list
+}
+
 function splitDocument() {
+  if (loading.value) {
+    return
+  }
   loading.value = true
   const fd = new FormData()
-  documentsFiles.value.forEach((item) => {
+  const uploadFiles = documentsFiles.value.filter((item) => item?.raw)
+  const totalSize = uploadFiles.reduce((sum, item) => sum + (item.size || item.raw?.size || 0), 0)
+  uploadFiles.forEach((item) => {
     if (item?.raw) {
       fd.append('file', item?.raw)
     }
@@ -199,34 +303,68 @@ function splitDocument() {
       }
     })
   }
-  loadSharedApi({ type: 'document', systemType: apiType.value })
-    .postSplitDocument(id, fd)
-    .then((res: any) => {
-      const list = res.data
 
-      list.map((item: any) => {
-        if (item.name.length > 128) {
-          item.name = cutFilename(item.name, 128)
-        }
-        if (checkedConnect.value) {
-          item.content.map((v: any) => {
-            v['problem_list'] = v.title.trim()
-              ? [
-                  {
-                    content: v.title.trim(),
-                  },
-                ]
-              : []
-          })
-        }
-      })
+  const taskId = `${Date.now()}-${Math.random()}`
+  const patchCurrentDraft = (draft: Partial<DocumentUploadDraft>) => {
+    if (knowledge.documentUploadDraft?.taskId === taskId) {
+      knowledge.patchDocumentUploadDraft(draft)
+    }
+  }
+
+  knowledge.setDocumentUploadDraft({
+    key: draftKey.value,
+    taskId,
+    status: 'uploading',
+    progress: 0,
+    fileNames: uploadFiles.map((item) => item.name || item.raw?.name || ''),
+    fileCount: uploadFiles.length,
+    totalSize,
+    paragraphList: [],
+    checkedConnect: checkedConnect.value,
+    radio: radio.value,
+    form: {
+      patterns: [...form.patterns],
+      limit: form.limit,
+      with_filter: form.with_filter,
+    },
+    updatedAt: Date.now(),
+  })
+
+  const onUploadProgress: UploadProgressHandler = (progressEvent) => {
+    const total = progressEvent.total || totalSize
+    if (!total) {
+      return
+    }
+    const uploadPercent = Math.round((progressEvent.loaded / total) * 90)
+    patchCurrentDraft({
+      status: progressEvent.loaded >= total ? 'parsing' : 'uploading',
+      progress: Math.min(progressEvent.loaded >= total ? 95 : uploadPercent, 95),
+    })
+  }
+
+  const request = loadSharedApi({ type: 'document', systemType: apiType.value })
+    .postSplitDocument(id, fd, onUploadProgress)
+    .then((res: any) => {
+      const list = postParagraphList(res.data)
 
       paragraphList.value = list
       loading.value = false
+      patchCurrentDraft({
+        status: 'ready',
+        progress: 100,
+        paragraphList: list,
+      })
     })
     .catch(() => {
       loading.value = false
+      patchCurrentDraft({
+        status: 'failed',
+        progress: draftProgress.value,
+        message: t('views.document.setRules.progress.failed'),
+      })
     })
+
+  patchCurrentDraft({ promise: request })
 }
 
 const initSplitPatternList = () => {
@@ -238,12 +376,25 @@ const initSplitPatternList = () => {
 }
 
 watch(radio, () => {
+  patchDraftConfig()
   if (radio.value === '2') {
     initSplitPatternList()
   }
 })
 
+watch(
+  () => knowledge.documentUploadDraft,
+  (draft) => {
+    applyDraft(draft)
+  },
+  { deep: true },
+)
+
 onMounted(() => {
+  if (currentDraft.value) {
+    applyDraft(currentDraft.value)
+    return
+  }
   splitDocument()
 })
 
@@ -265,6 +416,18 @@ defineExpose({
     .title {
       font-size: 14px;
       font-weight: 400;
+    }
+  }
+  .upload-progress {
+    padding: 12px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 6px;
+    background: var(--el-fill-color-lighter);
+
+    &__tip {
+      display: block;
+      margin-top: 8px;
+      word-break: break-all;
     }
   }
 }

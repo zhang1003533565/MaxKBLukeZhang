@@ -55,13 +55,13 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import SetRules from './upload/SetRules.vue'
 import ResultSuccess from './upload/ResultSuccess.vue'
 import UploadComponent from './upload/UploadComponent.vue'
 import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
-import { MsgConfirm, MsgSuccess } from '@/utils/message'
+import { MsgSuccess } from '@/utils/message'
 import { t } from '@/locales'
 import useStore from '@/stores'
 const { knowledge } = useStore()
@@ -94,7 +94,8 @@ const UploadComponentRef = ref()
 
 const loading = ref(false)
 const disabled = ref(false)
-const active = ref(0)
+const draftKey = computed(() => String(id || ''))
+const active = ref(knowledge.documentUploadDraft?.key === draftKey.value ? 1 : 0)
 const successInfo = ref<any>(null)
 async function next() {
   disabled.value = true
@@ -151,6 +152,7 @@ const prev = () => {
 function clearStore() {
   knowledge.saveDocumentsFile([])
   knowledge.saveDocumentsType('')
+  knowledge.clearDocumentUploadDraft()
 }
 function submit() {
   loading.value = true
@@ -185,22 +187,8 @@ function submit() {
   }
 }
 function back() {
-  if (documentsFiles.value?.length > 0) {
-    MsgConfirm(t('common.tip'), t('views.document.tip.saveMessage'), {
-      confirmButtonText: t('common.confirm'),
-    })
-      .then(() => {
-        router.go(-1)
-        clearStore()
-      })
-      .catch(() => {})
-  } else {
-    router.go(-1)
-  }
+  router.go(-1)
 }
-onUnmounted(() => {
-  clearStore()
-})
 </script>
 <style lang="scss">
 @use './index.scss';

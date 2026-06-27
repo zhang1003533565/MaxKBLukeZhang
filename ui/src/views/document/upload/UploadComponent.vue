@@ -208,7 +208,7 @@
   </el-row>
 </template>
 <script setup lang="ts">
-import { ref, reactive, onUnmounted, onMounted, computed, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import type { UploadFiles } from 'element-plus'
 import { filesize, getImgUrl, isRightType } from '@/utils/common'
@@ -273,10 +273,12 @@ function downloadTableTemplate(type: string) {
 
 function radioChange() {
   form.value.fileList = []
+  knowledge.clearDocumentUploadDraft()
 }
 
 function deleteFile(index: number | string) {
   form.value.fileList.splice(index, 1)
+  knowledge.clearDocumentUploadDraft()
 }
 
 // 上传on-change事件
@@ -301,6 +303,7 @@ const fileHandleChange = (file: any, fileList: UploadFiles) => {
     fileList.splice(-1, 1)
     return false
   }
+  knowledge.clearDocumentUploadDraft()
 }
 
 const onExceed = () => {
@@ -349,13 +352,6 @@ onMounted(() => {
   }
   getDetail()
 })
-onUnmounted(() => {
-  form.value = {
-    fileType: 'txt',
-    fileList: [],
-  }
-})
-
 defineExpose({
   validate,
   form,

@@ -9,6 +9,7 @@ import {
   post,
   put
 } from '@/request/index'
+import type { UploadProgressHandler } from '@/request/index'
 import type { Ref } from 'vue'
 import type { KeyValue, pageRequest } from '@/api/type/common'
 
@@ -456,9 +457,14 @@ const postQADocument: (
  * 分段预览（上传文档）
  * @param 参数  file:file,limit:number,patterns:array,with_filter:boolean
  */
-const postSplitDocument: (knowledge_id: string, data: any) => Promise<Result<any>> = (
+const postSplitDocument: (
+  knowledge_id: string,
+  data: any,
+  onUploadProgress?: UploadProgressHandler,
+) => Promise<Result<any>> = (
   knowledge_id,
   data,
+  onUploadProgress,
 ) => {
   return post(
     `${prefix.value}/${knowledge_id}/document/split`,
@@ -466,6 +472,7 @@ const postSplitDocument: (knowledge_id: string, data: any) => Promise<Result<any
     undefined,
     undefined,
     1000 * 60 * 60,
+    onUploadProgress,
   )
 }
 

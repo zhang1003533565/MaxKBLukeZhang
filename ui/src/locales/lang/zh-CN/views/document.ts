@@ -92,6 +92,14 @@ export default {
     checkedConnect: {
       label: '导入时添加分段标题为关联问题（适用于标题为问题的问答对）',
     },
+    progress: {
+      uploading: '正在上传文档',
+      parsing: '上传完成，正在解析分段',
+      ready: '草稿已生成',
+      failed: '处理失败，请重新生成预览',
+      files: '文件：',
+      draft: '已保留当前上传草稿',
+    },
   },
   buttons: {
     import: '开始导入',

@@ -1,4 +1,4 @@
-import axios, { type InternalAxiosRequestConfig, AxiosHeaders } from 'axios'
+import axios, { type InternalAxiosRequestConfig, AxiosHeaders, type AxiosProgressEvent } from 'axios'
 import { MsgError } from '@/utils/message'
 import type { NProgress } from 'nprogress'
 import type { Ref } from 'vue'
@@ -91,6 +91,8 @@ instance.interceptors.response.use(
 
 export const request = instance
 
+export type UploadProgressHandler = (progressEvent: AxiosProgressEvent) => void
+
 /* 简化请求方法，统一处理返回结果，并增加loading处理，这里以{success,data,message}格式的返回值为例，具体项目根据实际需求修改 */
 const promise: (
   request: Promise<any>,
@@ -159,8 +161,12 @@ export const post: (
   params?: unknown,
   loading?: NProgress | Ref<boolean>,
   timeout?: number,
-) => Promise<Result<any> | any> = (url, data, params, loading, timeout) => {
-  return promise(request({ url: url, method: 'post', data, params, timeout }), loading)
+  onUploadProgress?: UploadProgressHandler,
+) => Promise<Result<any> | any> = (url, data, params, loading, timeout, onUploadProgress) => {
+  return promise(
+    request({ url: url, method: 'post', data, params, timeout, onUploadProgress }),
+    loading,
+  )
 }
 
 /**|
