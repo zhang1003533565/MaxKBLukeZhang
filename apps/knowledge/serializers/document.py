@@ -1,9 +1,11 @@
+import base64
 import io
 import json
 import os
 import re
 from collections import defaultdict
 from functools import reduce
+from imghdr import what
 from tempfile import TemporaryDirectory
 from typing import Dict, List
 
@@ -31,7 +33,7 @@ from common.handle.impl.text.xls_split_handle import XlsSplitHandle
 from common.handle.impl.text.xlsx_split_handle import XlsxSplitHandle
 from common.handle.impl.text.zip_split_handle import ZipSplitHandle
 from common.utils.common import bulk_create_in_batches, get_file_content, parse_image, post
-from common.utils.split_model import flat_map
+from common.utils.split_model import flat_map, smart_split_paragraph
 from django.contrib.postgres.fields import JSONField
 from django.core import validators
 from django.db import models, transaction
@@ -42,8 +44,11 @@ from django.db.models.query_utils import Q
 from django.http import HttpResponse
 from django.utils.translation import get_language, gettext
 from django.utils.translation import gettext_lazy as _
+from langchain_core.messages import HumanMessage
 from maxkb.const import PROJECT_DIR
+from models_provider.base_model_provider import ModelTypeConst
 from models_provider.models import Model
+from models_provider.tools import get_model_by_id, get_model_instance_by_model_workspace_id
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from oss.serializers.file import FileSerializer
 from rest_framework import serializers
@@ -194,6 +199,8 @@ class DocumentSplitRequest(serializers.Serializer):
         required=False, child=serializers.CharField(required=True, label=_("patterns")), label=_("patterns")
     )
     with_filter = serializers.BooleanField(required=False, label=_("Auto Clean"))
+    split_strategy = serializers.CharField(required=False, allow_blank=True, label=_("split strategy"))
+    model_id = serializers.UUIDField(required=False, allow_null=True, label=_("model id"))
 
 
 class DocumentInstanceQASerializer(serializers.Serializer):
@@ -1071,6 +1078,12 @@ class DocumentSerializers(serializers.Serializer):
                     file.save(file_bytes)
 
     class Split(serializers.Serializer):
+        LLM_TEXT_STRATEGY = "llm_text"
+        LLM_VISION_STRATEGY = "llm_vision"
+        MODEL_SPLIT_STRATEGIES = [LLM_TEXT_STRATEGY, LLM_VISION_STRATEGY]
+        MODEL_BATCH_LIMIT = 12000
+        MODEL_IMAGE_LIMIT = 8
+
         workspace_id = serializers.CharField(required=False, label=_("workspace id"), allow_null=True)
         knowledge_id = serializers.UUIDField(required=True, label=_("knowledge id"))
 
@@ -1096,6 +1109,11 @@ class DocumentSerializers(serializers.Serializer):
             DocumentSplitRequest(data=instance).is_valid(raise_exception=True)
 
             file_list = instance.get("file")
+            split_strategy = instance.get("split_strategy") or ""
+            model_id = instance.get("model_id")
+            if split_strategy in self.MODEL_SPLIT_STRATEGIES and not model_id:
+                raise AppApiException(500, _("Model is not allowed to be empty"))
+
             return reduce(
                 lambda x, y: [*x, *y],
                 [
@@ -1104,6 +1122,8 @@ class DocumentSerializers(serializers.Serializer):
                         instance.get("patterns", None),
                         instance.get("with_filter", None),
                         instance.get("limit", 4096),
+                        split_strategy,
+                        model_id,
                     )
                     for f in file_list
                 ],
@@ -1125,7 +1145,227 @@ class DocumentSerializers(serializers.Serializer):
                     file.source_id = self.data.get("knowledge_id")
                     file.save(file_bytes)
 
-        def file_to_paragraph(self, file, pattern_list: List, with_filter: bool, limit: int):
+        @staticmethod
+        def _response_content(response):
+            content = getattr(response, "content", response)
+            if isinstance(content, list):
+                text_list = []
+                for item in content:
+                    if isinstance(item, dict):
+                        text_list.append(str(item.get("text") or item))
+                    else:
+                        text_list.append(str(item))
+                return "\n".join(text_list)
+            return "" if content is None else str(content)
+
+        @staticmethod
+        def _normalize_limit(limit):
+            try:
+                limit = int(limit)
+            except Exception:
+                limit = 4096
+            if limit < 50:
+                return 50
+            if limit > 100000:
+                return 100000
+            return limit
+
+        @staticmethod
+        def _loads_json_payload(text):
+            text = text.strip()
+            candidates = [text]
+            fenced = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, flags=re.IGNORECASE)
+            if fenced:
+                candidates.insert(0, fenced.group(1).strip())
+            obj_start, obj_end = text.find("{"), text.rfind("}")
+            if obj_start >= 0 and obj_end > obj_start:
+                candidates.append(text[obj_start : obj_end + 1])
+            arr_start, arr_end = text.find("["), text.rfind("]")
+            if arr_start >= 0 and arr_end > arr_start:
+                candidates.append(text[arr_start : arr_end + 1])
+
+            for candidate in candidates:
+                try:
+                    return json.loads(candidate)
+                except Exception:
+                    pass
+            raise AppApiException(500, _("Model split result is not valid JSON"))
+
+        def _get_model(self, model_id, split_strategy):
+            workspace_id = self.data.get("workspace_id")
+            expected_type = (
+                ModelTypeConst.IMAGE.name
+                if split_strategy == self.LLM_VISION_STRATEGY
+                else ModelTypeConst.LLM.name
+            )
+            model = get_model_by_id(str(model_id), workspace_id)
+            if model.model_type != expected_type:
+                if split_strategy == self.LLM_VISION_STRATEGY:
+                    raise AppApiException(500, _("Please select a vision model"))
+                raise AppApiException(500, _("Please select an LLM model"))
+            return get_model_instance_by_model_workspace_id(str(model_id), workspace_id)
+
+        def _paragraph_blocks(self, paragraphs, limit):
+            blocks = []
+            for paragraph in paragraphs:
+                title = str(paragraph.get("title") or "").strip()
+                content = str(paragraph.get("content") or "").strip()
+                if not content:
+                    continue
+                text = f"### {title}\n{content}" if title else content
+                blocks.extend(smart_split_paragraph(text, self.MODEL_BATCH_LIMIT))
+            return [block for block in blocks if block.strip()]
+
+        @staticmethod
+        def _image_file_ids(content):
+            image_ids = []
+            for image_ref in parse_image(content):
+                match = re.search(r"\./oss/(?:image|file)/([0-9a-fA-F-]+)", image_ref)
+                if match:
+                    image_ids.append(match.group(1))
+            return list(dict.fromkeys(image_ids))
+
+        def _batch_blocks(self, blocks, split_strategy):
+            batches = []
+            current = []
+            current_len = 0
+            current_image_ids = []
+            for block in blocks:
+                block_len = len(block)
+                block_image_ids = self._image_file_ids(block) if split_strategy == self.LLM_VISION_STRATEGY else []
+                image_limit_exceeded = (
+                    split_strategy == self.LLM_VISION_STRATEGY
+                    and len(set([*current_image_ids, *block_image_ids])) > self.MODEL_IMAGE_LIMIT
+                )
+                if current and (current_len + block_len > self.MODEL_BATCH_LIMIT or image_limit_exceeded):
+                    batches.append("\n\n".join(current))
+                    current = []
+                    current_len = 0
+                    current_image_ids = []
+                current.append(block)
+                current_len += block_len
+                current_image_ids = list(dict.fromkeys([*current_image_ids, *block_image_ids]))
+            if current:
+                batches.append("\n\n".join(current))
+            return batches
+
+        def _image_messages(self, content):
+            image_ids = self._image_file_ids(content)
+            if not image_ids:
+                return []
+
+            image_messages = []
+            for file_id in image_ids:
+                if len(image_messages) >= self.MODEL_IMAGE_LIMIT:
+                    break
+                image_file = QuerySet(File).filter(id=file_id).first()
+                if image_file is None:
+                    continue
+                image_bytes = image_file.get_bytes()
+                image_format = what(None, image_bytes) or "png"
+                base64_image = base64.b64encode(image_bytes).decode("utf-8")
+                image_messages.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/{image_format};base64,{base64_image}"},
+                    }
+                )
+            return image_messages
+
+        def _model_split_prompt(self, document_name, content, limit, split_strategy):
+            vision_tip = (
+                "你会同时收到文档中的图片，请结合图片里的文字、图表和上下文决定分段，并把关键图片信息写进相关段落。"
+                if split_strategy == self.LLM_VISION_STRATEGY
+                else "如果内容中出现图片 Markdown 引用，只保留引用，不要臆测图片里的内容。"
+            )
+            return (
+                "你是知识库文档切分器。请根据标题层级、语义主题、表格和上下文，把文档切成适合检索的段落。\n"
+                f"{vision_tip}\n"
+                f"文档名：{document_name}\n"
+                f"单段建议不超过 {limit} 字。\n"
+                "只输出 JSON，不要输出 Markdown 代码块或解释文字。\n"
+                'JSON 格式必须是：{"paragraphs":[{"title":"段落标题，可为空","content":"段落正文"}]}\n'
+                "要求：段落语义完整；不要丢失原文事实；不要编造原文没有的信息；表格内容要尽量保持在同一主题段落里。\n"
+                "待切分内容：\n"
+                f"{content}"
+            )
+
+        def _model_message(self, prompt, content, split_strategy):
+            if split_strategy != self.LLM_VISION_STRATEGY:
+                return HumanMessage(content=prompt)
+            image_messages = self._image_messages(content)
+            if not image_messages:
+                return HumanMessage(content=prompt)
+            return HumanMessage(content=[{"type": "text", "text": prompt}, *image_messages])
+
+        def _normalize_model_paragraphs(self, payload, limit):
+            paragraphs = payload.get("paragraphs") if isinstance(payload, dict) else payload
+            if not isinstance(paragraphs, list):
+                raise AppApiException(500, _("Model split result is not valid JSON"))
+
+            result = []
+            for paragraph in paragraphs:
+                if isinstance(paragraph, str):
+                    title = ""
+                    content = paragraph
+                elif isinstance(paragraph, dict):
+                    title = str(paragraph.get("title") or "").strip()[:256]
+                    content = str(paragraph.get("content") or "").strip()
+                else:
+                    continue
+
+                if not content:
+                    continue
+                for split_content in smart_split_paragraph(content, limit):
+                    if split_content.strip():
+                        result.append({"title": title, "content": split_content.strip()})
+            if not result:
+                raise AppApiException(500, _("Model split result is empty"))
+            return result
+
+        def _split_content_with_model(self, document_name, paragraphs, split_strategy, model_id, limit):
+            limit = self._normalize_limit(limit)
+            blocks = self._paragraph_blocks(paragraphs, limit)
+            if not blocks:
+                return paragraphs
+
+            llm_model = self._get_model(model_id, split_strategy)
+            result = []
+            for batch in self._batch_blocks(blocks, split_strategy):
+                prompt = self._model_split_prompt(document_name, batch, limit, split_strategy)
+                message = self._model_message(prompt, batch, split_strategy)
+                try:
+                    response = llm_model.invoke([message])
+                except AppApiException:
+                    raise
+                except Exception as e:
+                    raise AppApiException(500, str(e)) from e
+                payload = self._loads_json_payload(self._response_content(response))
+                result.extend(self._normalize_model_paragraphs(payload, limit))
+            return result
+
+        def _wrap_split_result(self, result, file_id):
+            result_list = result if isinstance(result, list) else [result]
+            for item in result_list:
+                item["source_file_id"] = file_id
+            return result_list
+
+        def _apply_model_split(self, result_list, split_strategy, model_id, limit):
+            if split_strategy not in self.MODEL_SPLIT_STRATEGIES:
+                return result_list
+            for result in result_list:
+                result["content"] = self._split_content_with_model(
+                    result.get("name") or "",
+                    result.get("content") or [],
+                    split_strategy,
+                    model_id,
+                    limit,
+                )
+            return result_list
+
+        def file_to_paragraph(
+            self, file, pattern_list: List, with_filter: bool, limit: int, split_strategy=None, model_id=None
+        ):
             # 保存源文件
             file_id = uuid.uuid7()
             raw_file = File(
@@ -1142,19 +1382,19 @@ class DocumentSerializers(serializers.Serializer):
             for split_handle in split_handles:
                 if split_handle.support(file, get_buffer):
                     result = split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, self.save_image)
-                    if isinstance(result, list):
-                        for item in result:
-                            item["source_file_id"] = file_id
-                        return result
-                    result["source_file_id"] = file_id
-                    return [result]
+                    return self._apply_model_split(
+                        self._wrap_split_result(result, file_id),
+                        split_strategy,
+                        model_id,
+                        limit,
+                    )
             result = default_split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, self.save_image)
-            if isinstance(result, list):
-                for item in result:
-                    item["source_file_id"] = file_id
-                return result
-            result["source_file_id"] = file_id
-            return [result]
+            return self._apply_model_split(
+                self._wrap_split_result(result, file_id),
+                split_strategy,
+                model_id,
+                limit,
+            )
 
     class SplitPattern(serializers.Serializer):
         workspace_id = serializers.CharField(required=False, label=_("workspace id"), allow_null=True)

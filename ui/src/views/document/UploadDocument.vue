@@ -47,7 +47,7 @@
         @click="submit"
         type="primary"
         v-if="active === 1"
-        :disabled="SetRulesRef?.loading || loading"
+        :disabled="!SetRulesRef?.canImport || SetRulesRef?.loading || loading"
       >
         {{ $t('views.document.buttons.import') }}
       </el-button>

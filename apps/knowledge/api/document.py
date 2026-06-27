@@ -43,6 +43,14 @@ class DocumentSplitAPI(APIMixin):
                     'with_filter': {
                         'type': 'boolean',
                         'description': '是否清除特殊字符'
+                    },
+                    'split_strategy': {
+                        'type': 'string',
+                        'description': '切分策略：llm_text 为纯文本大模型切分，llm_vision 为图文大模型切分'
+                    },
+                    'model_id': {
+                        'type': 'string',
+                        'description': '大模型切分时使用的模型 ID'
                     }
                 }
             }

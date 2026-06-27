@@ -250,6 +250,10 @@ class DocumentView(APIView):
                 split_data.__setitem__("limit", request_data.get("limit"))
             if "with_filter" in request.data:
                 split_data.__setitem__("with_filter", request_data.get("with_filter"))
+            if "split_strategy" in request.data:
+                split_data.__setitem__("split_strategy", request_data.get("split_strategy"))
+            if "model_id" in request.data:
+                split_data.__setitem__("model_id", request_data.get("model_id"))
             return result.success(
                 DocumentSerializers.Split(
                     data={

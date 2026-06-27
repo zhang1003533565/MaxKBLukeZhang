@@ -17,10 +17,13 @@ export interface DocumentUploadDraft {
   paragraphList: any[]
   checkedConnect: boolean
   radio: string
+  startedByUser?: boolean
   form: {
     patterns: string[]
     limit: number
     with_filter: boolean
+    llm_model_id: string
+    vision_model_id: string
   }
   message?: string
   updatedAt: number

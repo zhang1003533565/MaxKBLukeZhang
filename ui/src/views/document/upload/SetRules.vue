@@ -89,6 +89,46 @@
                     </div>
                   </el-card>
                 </el-card>
+                <el-card shadow="never" class="mb-16" :class="radio === '3' ? 'border-active' : ''">
+                  <el-radio value="3" size="large">
+                    <p class="mb-4">{{ $t('views.document.setRules.llmText.label') }}</p>
+                    <el-text type="info">
+                      {{ $t('views.document.setRules.llmText.text') }}
+                    </el-text>
+                  </el-radio>
+
+                  <div v-if="radio === '3'" class="model-select mt-16" style="margin-left: 30px">
+                    <div class="title mb-8">{{ $t('views.document.setRules.model.label') }}</div>
+                    <ModelSelect
+                      v-model="activeModelId"
+                      :placeholder="$t('views.document.setRules.model.llmPlaceholder')"
+                      :options="llmModelOptions"
+                      @submitModel="getSelectModel('LLM')"
+                      showFooter
+                      :model-type="'LLM'"
+                    />
+                  </div>
+                </el-card>
+                <el-card shadow="never" class="mb-16" :class="radio === '4' ? 'border-active' : ''">
+                  <el-radio value="4" size="large">
+                    <p class="mb-4">{{ $t('views.document.setRules.llmVision.label') }}</p>
+                    <el-text type="info">
+                      {{ $t('views.document.setRules.llmVision.text') }}
+                    </el-text>
+                  </el-radio>
+
+                  <div v-if="radio === '4'" class="model-select mt-16" style="margin-left: 30px">
+                    <div class="title mb-8">{{ $t('views.document.setRules.model.label') }}</div>
+                    <ModelSelect
+                      v-model="activeModelId"
+                      :placeholder="$t('views.document.setRules.model.visionPlaceholder')"
+                      :options="visionModelOptions"
+                      @submitModel="getSelectModel('IMAGE')"
+                      showFooter
+                      :model-type="'IMAGE'"
+                    />
+                  </div>
+                </el-card>
               </el-radio-group>
             </div>
           </el-scrollbar>
@@ -102,7 +142,7 @@
             </el-checkbox>
           </div>
           <div class="text-right mt-8">
-            <el-button @click="splitDocument" :disabled="loading">
+            <el-button @click="splitDocument" :disabled="previewDisabled">
               {{ $t('views.document.buttons.preview') }}</el-button
             >
           </div>
@@ -140,6 +180,7 @@ import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
 import { t } from '@/locales'
 import type { UploadProgressHandler } from '@/request/index'
 import type { DocumentUploadDraft } from '@/stores/modules/knowledge'
+import { groupBy } from 'lodash'
 const { knowledge } = useStore()
 const documentsFiles = computed(() => knowledge.documentsFiles)
 const splitPatternList = ref<Array<KeyValue<string, string>>>([])
@@ -162,6 +203,8 @@ const radio = ref('1')
 const loading = ref(false)
 const paragraphList = ref<any[]>([])
 const patternLoading = ref<boolean>(false)
+const llmModelOptions = ref<any>({})
+const visionModelOptions = ref<any>({})
 const checkedConnect = ref<boolean>(false)
 const draftKey = computed(() => String(id || ''))
 const currentDraft = computed(() => {
@@ -206,11 +249,43 @@ const form = reactive<{
   patterns: Array<string>
   limit: number
   with_filter: boolean
+  llm_model_id: string
+  vision_model_id: string
   [propName: string]: any
 }>({
   patterns: [],
   limit: 500,
   with_filter: true,
+  llm_model_id: '',
+  vision_model_id: '',
+})
+
+const isModelSplit = computed(() => radio.value === '3' || radio.value === '4')
+const splitStrategy = computed(() => {
+  if (radio.value === '3') {
+    return 'llm_text'
+  }
+  if (radio.value === '4') {
+    return 'llm_vision'
+  }
+  return ''
+})
+const activeModelId = computed({
+  get: () => (radio.value === '4' ? form.vision_model_id : form.llm_model_id),
+  set: (value: string) => {
+    if (radio.value === '4') {
+      form.vision_model_id = value
+    } else {
+      form.llm_model_id = value
+    }
+    patchDraftConfig()
+  },
+})
+const previewDisabled = computed(() => {
+  return loading.value || (isModelSplit.value && !activeModelId.value)
+})
+const canImport = computed(() => {
+  return !loading.value && paragraphList.value.length > 0 && currentDraft.value?.status === 'ready'
 })
 
 function changeHandle(val: boolean) {
@@ -244,6 +319,8 @@ function patchDraftConfig() {
       patterns: [...form.patterns],
       limit: form.limit,
       with_filter: form.with_filter,
+      llm_model_id: form.llm_model_id,
+      vision_model_id: form.vision_model_id,
     },
   })
 }
@@ -252,10 +329,18 @@ function applyDraft(draft: DocumentUploadDraft | null) {
   if (!draft || draft.key !== draftKey.value) {
     return
   }
+  if ((draft.status === 'uploading' || draft.status === 'parsing') && !draft.startedByUser) {
+    knowledge.clearDocumentUploadDraft()
+    loading.value = false
+    paragraphList.value = []
+    return
+  }
   radio.value = draft.radio || '1'
   form.patterns = [...(draft.form?.patterns || [])]
   form.limit = draft.form?.limit || 500
   form.with_filter = draft.form?.with_filter ?? true
+  form.llm_model_id = draft.form?.llm_model_id || ''
+  form.vision_model_id = draft.form?.vision_model_id || ''
   checkedConnect.value = Boolean(draft.checkedConnect)
   paragraphList.value = draft.paragraphList || []
   loading.value = draft.status === 'uploading' || draft.status === 'parsing'
@@ -298,10 +383,14 @@ function splitDocument() {
     Object.keys(form).forEach((key) => {
       if (key == 'patterns') {
         form.patterns.forEach((item) => fd.append('patterns', item))
-      } else {
+      } else if (['limit', 'with_filter'].includes(key)) {
         fd.append(key, form[key])
       }
     })
+  }
+  if (splitStrategy.value) {
+    fd.append('split_strategy', splitStrategy.value)
+    fd.append('model_id', activeModelId.value)
   }
 
   const taskId = `${Date.now()}-${Math.random()}`
@@ -322,10 +411,13 @@ function splitDocument() {
     paragraphList: [],
     checkedConnect: checkedConnect.value,
     radio: radio.value,
+    startedByUser: true,
     form: {
       patterns: [...form.patterns],
       limit: form.limit,
       with_filter: form.with_filter,
+      llm_model_id: form.llm_model_id,
+      vision_model_id: form.vision_model_id,
     },
     updatedAt: Date.now(),
   })
@@ -375,11 +467,34 @@ const initSplitPatternList = () => {
     })
 }
 
+function getSelectModel(modelType: 'LLM' | 'IMAGE') {
+  loadSharedApi({ type: 'model', systemType: apiType.value })
+    .getSelectModelList({ model_type: modelType })
+    .then((res: any) => {
+      const options = groupBy(res?.data || [], 'provider')
+      if (modelType === 'LLM') {
+        llmModelOptions.value = options
+      } else {
+        visionModelOptions.value = options
+      }
+    })
+}
+
+function initModelOptions() {
+  if (radio.value === '3') {
+    getSelectModel('LLM')
+  }
+  if (radio.value === '4') {
+    getSelectModel('IMAGE')
+  }
+}
+
 watch(radio, () => {
   patchDraftConfig()
   if (radio.value === '2') {
     initSplitPatternList()
   }
+  initModelOptions()
 })
 
 watch(
@@ -393,15 +508,15 @@ watch(
 onMounted(() => {
   if (currentDraft.value) {
     applyDraft(currentDraft.value)
-    return
+    initModelOptions()
   }
-  splitDocument()
 })
 
 defineExpose({
   paragraphList,
   checkedConnect,
   loading,
+  canImport,
 })
 </script>
 <style scoped lang="scss">

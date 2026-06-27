@@ -82,6 +82,19 @@ export default {
       label: 'Advanced Segmentation',
       text: 'Users can customize segmentation delimiters, segment length, and cleaning rules based on document standards.',
     },
+    llmText: {
+      label: 'LLM Text Segmentation',
+      text: 'Use a text-only LLM to split by semantics. Images are kept as references.',
+    },
+    llmVision: {
+      label: 'LLM Vision Segmentation',
+      text: 'Use a vision-capable model to split with both document images and text.',
+    },
+    model: {
+      label: 'Segmentation Model',
+      llmPlaceholder: 'Select a text LLM',
+      visionPlaceholder: 'Select a vision model',
+    },
     patterns: {
       label: 'Segment Delimiters',
       tooltip:

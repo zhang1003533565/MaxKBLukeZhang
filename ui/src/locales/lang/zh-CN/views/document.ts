@@ -77,6 +77,19 @@ export default {
       label: '高级分段',
       text: '用户可根据文档规范自行设置分段标识符、分段长度以及清洗规则',
     },
+    llmText: {
+      label: '大模型文本分段',
+      text: '使用纯文本大模型根据语义重新切分，图片只保留引用',
+    },
+    llmVision: {
+      label: '大模型图文分段',
+      text: '使用支持图片理解的图文模型，结合文档图片和文字重新切分',
+    },
+    model: {
+      label: '切分模型',
+      llmPlaceholder: '请选择文本大模型',
+      visionPlaceholder: '请选择图文大模型',
+    },
     patterns: {
       label: '分段标识',
       tooltip: '按照所选符号先后顺序做递归分割，分割结果超出分段长度将截取至分段长度。',
