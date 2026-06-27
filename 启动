@@ -1,4 +1,7 @@
-./scripts/dev-all.sh
+macOS/Linux: ./start
+Windows: 双击 start.bat
+Backend: 8082
+Redis: 6380
 ./scripts/validate-code-rules.sh
 http://localhost:3000/admin/
 admin

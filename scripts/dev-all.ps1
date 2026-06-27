@@ -108,6 +108,8 @@ try {
     Set-DefaultEnv "MAXKB_KNOWLEDGE_ONLY" "true"
     Set-DefaultEnv "MAXKB_LOG_DIR" (Join-Path $LocalDir "logs")
     Set-DefaultEnv "MAXKB_TMP_DIR" (Join-Path $LocalDir "tmp")
+    Set-DefaultEnv "MAXKB_BACKEND_PORT" "8082"
+    Set-DefaultEnv "VITE_BACKEND_PORT" $env:MAXKB_BACKEND_PORT
     Set-DefaultEnv "HF_HOME" (Join-Path $LocalDir "model\base")
     Set-DefaultEnv "TMPDIR" (Join-Path $LocalDir "tmp")
     Set-DefaultEnv "TMP" (Join-Path $LocalDir "tmp")
@@ -121,7 +123,7 @@ try {
     Set-DefaultEnv "MAXKB_DB_MAX_OVERFLOW" "80"
 
     Set-DefaultEnv "MAXKB_REDIS_HOST" "127.0.0.1"
-    Set-DefaultEnv "MAXKB_REDIS_PORT" "6379"
+    Set-DefaultEnv "MAXKB_REDIS_PORT" "6380"
     Set-DefaultEnv "MAXKB_REDIS_PASSWORD" "Password123@redis"
     Set-DefaultEnv "MAXKB_REDIS_DB" "0"
     Set-DefaultEnv "MAXKB_REDIS_MAX_CONNECTIONS" "100"
@@ -173,6 +175,22 @@ try {
         Pop-Location
     }
 
+    if ($env:MAXKB_DEV_SKIP_PREP -ne "true") {
+        Write-DevLog "Preparing backend static files..."
+        & $Python "main.py" "collect_static"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Backend static preparation failed with code $LASTEXITCODE."
+        }
+
+        Write-DevLog "Applying database migrations..."
+        & $Python "main.py" "upgrade_db"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Database migration failed with code $LASTEXITCODE."
+        }
+    }
+
+    [Environment]::SetEnvironmentVariable("MAXKB_SKIP_DEV_PREP", "true", "Process")
+
     Write-DevLog "Starting backend, celery, and frontend..."
     Start-DevProcess "backend" $Python @("main.py", "dev", "web") $RootDir
     Start-DevProcess "celery" $Python @("main.py", "dev", "celery") $RootDir
@@ -180,7 +198,7 @@ try {
 
     Write-DevLog "Ready:"
     Write-DevLog "  Frontend: http://localhost:3000/admin"
-    Write-DevLog "  Backend:  http://localhost:8080"
+    Write-DevLog "  Backend:  http://localhost:$env:MAXKB_BACKEND_PORT"
     Write-DevLog "Press Ctrl+C to stop app processes."
     Write-DevLog "Docker dependencies stay running by default. Use -StopDepsOnExit to stop them on exit."
 

@@ -38,47 +38,48 @@ export default defineConfig((conf: any) => {
   const entry = ENV.VITE_ENTRY || (isChatMode ? 'chat.html' : 'admin.html')
   const basePath = ENV.VITE_BASE_PATH || (isChatMode ? '/chat/' : '/admin/')
   const appPort = ENV.VITE_APP_PORT || (isChatMode ? '3001' : '3000')
+  const backendPort = ENV.VITE_BACKEND_PORT || process.env.VITE_BACKEND_PORT || '8082'
   const proxyConf: Record<string, string | ProxyOptions> = {}
   proxyConf['/admin/api'] = {
-    target: 'http://127.0.0.1:8080',
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
   }
   proxyConf['/chat/api'] = {
-    target: 'http://127.0.0.1:8080',
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
   }
   proxyConf['/openapi'] = {
-    target: 'http://127.0.0.1:8080',
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
   }
   proxyConf['/doc'] = {
-    target: 'http://127.0.0.1:8080',
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
     rewrite: (path: string) => path.replace(basePath, '/'),
   }
   proxyConf['/schema'] = {
-    target: 'http://127.0.0.1:8080',
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
     rewrite: (path: string) => path.replace(basePath, '/'),
   }
   proxyConf['/static'] = {
-    target: 'http://127.0.0.1:8080',
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
     rewrite: (path: string) => path.replace(basePath, '/'),
   }
 
   // 前端静态资源转发到本身
   proxyConf[`^${basePath}.+\/oss\/file\/.*$`] = {
-    target: `http://127.0.0.1:8080`,
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
   }
   // 前端静态资源转发到本身
   proxyConf[`^${basePath}oss\/file\/.*$`] = {
-    target: `http://127.0.0.1:8080`,
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
   }
   proxyConf[`^${basePath}oss\/get_url\/.*$`] = {
-    target: `http://127.0.0.1:8080`,
+    target: `http://127.0.0.1:${backendPort}`,
     changeOrigin: true,
   }
   // 前端静态资源转发到本身

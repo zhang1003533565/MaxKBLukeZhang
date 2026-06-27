@@ -19,21 +19,29 @@
 macOS 或 Linux：
 
 ```bash
-./scripts/dev-all.sh
+./start
 ```
 
-Windows PowerShell：
+Windows：
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\dev-all.ps1
+```cmd
+start.bat
 ```
+
+也可以在资源管理器中直接双击 `start.bat`。
 
 启动完成后：
 
 - 管理端端口：`3000`，路径：`/admin`
-- 后端端口：`8080`
+- 后端端口：`8082`
+- 本地开发 Redis 宿主机端口：`6380`
 
 本地启动脚本会自动准备 PostgreSQL、Redis、后端服务、任务队列和前端管理端。
+如果 `6380` 或 `8082` 也被占用，可以临时指定其他端口，例如：
+
+```bash
+MAXKB_REDIS_PORT=6381 MAXKB_BACKEND_PORT=8082 ./start
+```
 
 ## 服务器部署
 

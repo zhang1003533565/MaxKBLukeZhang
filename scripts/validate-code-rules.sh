@@ -89,7 +89,7 @@ run_python_checks() {
     export GLOBAL_DB_USER="${GLOBAL_DB_USER:-root}"
     export GLOBAL_DB_PASSWORD="${GLOBAL_DB_PASSWORD:-Password123@postgres}"
     export GLOBAL_REDIS_HOST="${GLOBAL_REDIS_HOST:-127.0.0.1}"
-    export GLOBAL_REDIS_PORT="${GLOBAL_REDIS_PORT:-6379}"
+    export GLOBAL_REDIS_PORT="${GLOBAL_REDIS_PORT:-6380}"
     export GLOBAL_REDIS_PASSWORD="${GLOBAL_REDIS_PASSWORD:-Password123@redis}"
     .venv/bin/python apps/manage.py check
   else

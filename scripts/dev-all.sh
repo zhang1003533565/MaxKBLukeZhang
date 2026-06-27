@@ -109,6 +109,8 @@ export MAXKB_LOG_LEVEL="${MAXKB_LOG_LEVEL:-DEBUG}"
 export MAXKB_KNOWLEDGE_ONLY="${MAXKB_KNOWLEDGE_ONLY:-true}"
 export MAXKB_LOG_DIR="${MAXKB_LOG_DIR:-$LOCAL_DIR/logs}"
 export MAXKB_TMP_DIR="${MAXKB_TMP_DIR:-$LOCAL_DIR/tmp}"
+export MAXKB_BACKEND_PORT="${MAXKB_BACKEND_PORT:-8082}"
+export VITE_BACKEND_PORT="${VITE_BACKEND_PORT:-$MAXKB_BACKEND_PORT}"
 export HF_HOME="${HF_HOME:-$LOCAL_DIR/model/base}"
 export TMPDIR="${TMPDIR:-$LOCAL_DIR/tmp}"
 
@@ -120,7 +122,7 @@ export MAXKB_DB_PASSWORD="${MAXKB_DB_PASSWORD:-Password123@postgres}"
 export MAXKB_DB_MAX_OVERFLOW="${MAXKB_DB_MAX_OVERFLOW:-80}"
 
 export MAXKB_REDIS_HOST="${MAXKB_REDIS_HOST:-127.0.0.1}"
-export MAXKB_REDIS_PORT="${MAXKB_REDIS_PORT:-6379}"
+export MAXKB_REDIS_PORT="${MAXKB_REDIS_PORT:-6380}"
 export MAXKB_REDIS_PASSWORD="${MAXKB_REDIS_PASSWORD:-Password123@redis}"
 export MAXKB_REDIS_DB="${MAXKB_REDIS_DB:-0}"
 export MAXKB_REDIS_MAX_CONNECTIONS="${MAXKB_REDIS_MAX_CONNECTIONS:-100}"
@@ -164,6 +166,15 @@ if [ ! -d "$UI_DIR/node_modules" ]; then
   (cd "$UI_DIR" && npm install)
 fi
 
+if [ "${MAXKB_DEV_SKIP_PREP:-false}" != "true" ]; then
+  log "Preparing backend static files..."
+  python main.py collect_static
+  log "Applying database migrations..."
+  python main.py upgrade_db
+fi
+
+export MAXKB_SKIP_DEV_PREP=true
+
 trap cleanup INT TERM EXIT
 
 log "Starting backend, celery, and frontend..."
@@ -173,7 +184,7 @@ start_process frontend bash -lc 'cd ui && npm run dev'
 
 log "Ready:"
 log "  Frontend: http://localhost:3000/admin"
-log "  Backend:  http://localhost:8080"
+log "  Backend:  http://localhost:$MAXKB_BACKEND_PORT"
 log "Press Ctrl+C to stop app processes."
 log "Docker dependencies stay running by default. Use MAXKB_DEV_STOP_DEPS_ON_EXIT=true to stop them on exit."
 

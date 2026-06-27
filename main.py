@@ -25,7 +25,7 @@ def collect_static():
     try:
         management.call_command('collectstatic', '--no-input', '-c', verbosity=0, interactive=False)
         logging.info("Collect static files done")
-    except:
+    except Exception:
         pass
 
 
@@ -89,13 +89,18 @@ def start_services():
 def dev():
     services = args.services if isinstance(args.services, list) else args.services
     if services.__contains__('web'):
-        management.call_command('runserver', "0.0.0.0:8080")
+        backend_port = os.environ.get('MAXKB_BACKEND_PORT', '8082')
+        management.call_command('runserver', f"0.0.0.0:{backend_port}")
     elif services.__contains__('celery'):
         management.call_command('celery', 'celery')
     elif services.__contains__('local_model'):
         from maxkb.const import CONFIG
         bind = f'{CONFIG.get("LOCAL_MODEL_HOST")}:{CONFIG.get("LOCAL_MODEL_PORT")}'
         management.call_command('runserver', bind)
+
+
+def env_is_true(name: str) -> bool:
+    return os.environ.get(name, '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 if __name__ == '__main__':
@@ -138,8 +143,9 @@ if __name__ == '__main__':
     elif action == "collect_static":
         collect_static()
     elif action == 'dev':
-        collect_static()
-        perform_db_migrate()
+        if not env_is_true('MAXKB_SKIP_DEV_PREP'):
+            collect_static()
+            perform_db_migrate()
         dev()
     else:
         collect_static()
