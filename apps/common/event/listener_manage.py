@@ -133,7 +133,9 @@ class ListenerManagement:
             )
 
     @staticmethod
-    def embedding_by_paragraph(paragraph_id, embedding_model: Embeddings):
+    def embedding_by_paragraph(
+        paragraph_id, embedding_model: Embeddings, raise_on_error=False
+    ):
         """
         向量化段落 根据段落id
         @param paragraph_id:    段落id
@@ -178,6 +180,8 @@ class ListenerManagement:
             ListenerManagement.update_status(
                 QuerySet(Paragraph).filter(id=paragraph_id), TaskType.EMBEDDING, State.FAILURE
             )
+            if raise_on_error:
+                raise
         finally:
             maxkb_logger.info(_("End--->Embedding paragraph: {paragraph_id}").format(paragraph_id=paragraph_id))
 
@@ -187,12 +191,19 @@ class ListenerManagement:
         VectorStore.get_embedding_vector().batch_save(data_list, embedding_model, lambda: False)
 
     @staticmethod
-    def get_embedding_paragraph_apply(embedding_model, is_the_task_interrupted, post_apply=lambda: None):
+    def get_embedding_paragraph_apply(
+        embedding_model,
+        is_the_task_interrupted,
+        post_apply=lambda: None,
+        raise_on_error=False,
+    ):
         def embedding_paragraph_apply(paragraph_list):
             for paragraph in paragraph_list:
                 if is_the_task_interrupted():
                     break
-                ListenerManagement.embedding_by_paragraph(str(paragraph.get("id")), embedding_model)
+                ListenerManagement.embedding_by_paragraph(
+                    str(paragraph.get("id")), embedding_model, raise_on_error
+                )
             post_apply()
 
         return embedding_paragraph_apply
@@ -383,6 +394,7 @@ class ListenerManagement:
                     embedding_model,
                     is_the_task_interrupted,
                     ListenerManagement.get_aggregation_document_status(document_id),
+                    raise_on_error,
                 ),
                 is_the_task_interrupted,
             )

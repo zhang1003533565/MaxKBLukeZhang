@@ -15,7 +15,8 @@ export default {
     before: '优化前',
     after: '优化后',
     reportTitle: '优化报告',
-    report: '清理噪声 {removed_noise} 处，重写标题 {titles_rewritten} 个，拆分 {split_paragraphs} 段，回退 {fallback_batches} 批',
+    report: '清理噪声 {removed_noise} 处（明确页码 {removed_page_numbers}、重复内容 {removed_duplicates}），修复断行 {joined_pdf_lines} 处，保留待确认数字 {preserved_numeric_lines} 行；重写标题 {titles_rewritten} 个，拆分 {split_paragraphs} 段，合并 {merged_paragraphs} 段，回退 {fallback_batches} 批',
+    counts: '已处理 {processed} / {total} 批 · 剩余 {remaining} 批',
   },
   uploadDocument: '上传文档',
   importDocument: '导入文档',
@@ -128,7 +129,7 @@ export default {
     quality: {
       label: '高质量优化（增加文本模型调用）',
       reportTitle: '质量优化报告',
-      report: '清理噪声 {removed_noise} 处，重写标题 {titles_rewritten} 个，拆分 {split_paragraphs} 段，合并 {merged_paragraphs} 段，回退 {fallback_batches} 批，待检查图片 {fallback_images} 张',
+      report: '清理噪声 {removed_noise} 处（明确页码 {removed_page_numbers}、重复内容 {removed_duplicates}），修复断行 {joined_pdf_lines} 处，保留待确认数字 {preserved_numeric_lines} 行；重写标题 {titles_rewritten} 个，拆分 {split_paragraphs} 段，合并 {merged_paragraphs} 段，回退 {fallback_batches} 批，待检查图片 {fallback_images} 张',
     },
     progress: {
       uploading: '正在上传文档',

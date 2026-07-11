@@ -22,6 +22,9 @@
         <span>{{ message }}</span><span>{{ progress }}%</span>
       </div>
       <el-progress :percentage="progress" />
+      <div v-if="total > 0" class="text-secondary mt-8">
+        {{ $t('views.document.quality.counts', { processed, total, remaining }) }}
+      </div>
       <div class="text-right mt-16">
         <el-button v-if="activeTask" type="danger" plain :loading="cancelling" @click="cancelTask">
           {{ $t('views.document.quality.cancel') }}
@@ -86,6 +89,9 @@ const taskId = ref('')
 const status = ref('')
 const progress = ref(0)
 const message = ref('')
+const processed = ref(0)
+const total = ref(0)
+const remaining = ref(0)
 const result = ref<any>({ before: [], after: [], report: {} })
 const starting = ref(false)
 const cancelling = ref(false)
@@ -135,6 +141,9 @@ function poll() {
       status.value = task.status
       progress.value = task.progress || 0
       message.value = task.message || ''
+      processed.value = task.processed || 0
+      total.value = task.total || 0
+      remaining.value = task.remaining || 0
       if (task.status === 'completed') {
         result.value = task.result
         return
@@ -225,6 +234,9 @@ function resetTask() {
   status.value = ''
   progress.value = 0
   message.value = ''
+  processed.value = 0
+  total.value = 0
+  remaining.value = 0
   loadModels()
 }
 

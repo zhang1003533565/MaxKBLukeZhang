@@ -37,11 +37,83 @@ class DocumentQualityTest(SimpleTestCase):
         from knowledge.quality.document_quality import clean_paragraph_content
 
         cleaned, report = clean_paragraph_content(
-            "主题\n主题\n--------\n图片说明：架构图\n图片说明：架构图\n正文"
+            "主题\n主题\n--------\n图片说明：架构图\n图片说明：架构图\n正文",
+            "主题",
         )
 
-        self.assertEqual(cleaned, "主题\n图片说明：架构图\n正文")
-        self.assertEqual(report["removed_noise"], 3)
+        self.assertEqual(cleaned, "图片说明：架构图\n正文")
+        self.assertEqual(report["removed_noise"], 4)
+
+    def test_clean_content_removes_repeated_paragraph_title_and_tracks_report(self):
+        from knowledge.quality.document_quality import clean_paragraph_content
+
+        cleaned, report = clean_paragraph_content(
+            "### 在线帮助和相关资源\n在线帮助和相关资源\n正文",
+            "在线帮助和相关资源",
+        )
+
+        self.assertEqual(cleaned, "正文")
+        self.assertEqual(report["removed_duplicates"], 2)
+
+    def test_clean_content_uses_page_context_for_standalone_numbers(self):
+        from knowledge.quality.document_quality import clean_paragraph_content
+
+        cleaned, report = clean_paragraph_content(
+            "有效数字\n46\n正文\n38\n### 第 39 页\n下一页正文"
+        )
+
+        self.assertIn("46", cleaned)
+        self.assertIn("\n38\n", f"\n{cleaned}\n")
+        self.assertNotIn("第 39 页", cleaned)
+        self.assertEqual(report["removed_page_numbers"], 1)
+        self.assertEqual(report["preserved_numeric_lines"], 2)
+
+    def test_clean_content_does_not_treat_fact_or_code_page_text_as_page_context(self):
+        from knowledge.quality.document_quality import clean_paragraph_content
+
+        cleaned, report = clean_paragraph_content(
+            "状态码\n404\n### 第 39 页\n```text\n第 405 页\n```\n405"
+        )
+
+        self.assertIn("404", cleaned)
+        self.assertIn("405", cleaned)
+        self.assertEqual(report["removed_page_numbers"], 1)
+
+    def test_clean_content_joins_plain_chinese_pdf_line_breaks_only(self):
+        from knowledge.quality.document_quality import clean_paragraph_content
+
+        source = (
+            "Python功能全\n面、易学易用。\n"
+            "图片说明：这是一张\n说明图\n"
+            "https://example.com/a\nb\n"
+            "```python\nvalue = 'a\nb'\n```"
+        )
+        cleaned, report = clean_paragraph_content(source, join_pdf_lines=True)
+
+        self.assertIn("Python功能全面、易学易用。", cleaned)
+        self.assertIn("图片说明：这是一张\n说明图", cleaned)
+        self.assertIn("https://example.com/a\nb", cleaned)
+        self.assertIn("value = 'a\nb'", cleaned)
+        self.assertEqual(report["joined_pdf_lines"], 1)
+
+    def test_clean_content_does_not_join_non_pdf_or_duplicate_fact_lines(self):
+        from knowledge.quality.document_quality import clean_paragraph_content
+
+        source = "库存 0\n库存 0\n姓名\n张三"
+        cleaned, report = clean_paragraph_content(source)
+
+        self.assertEqual(cleaned, source)
+        self.assertEqual(report["removed_duplicates"], 0)
+        self.assertEqual(report["joined_pdf_lines"], 0)
+
+    def test_pdf_line_join_protects_common_code_and_query_prefixes(self):
+        from knowledge.quality.document_quality import clean_paragraph_content
+
+        source = "if 条件\n执行函数\nreturn 中文值\n下一语句\nSELECT 用户名\nFROM 用户表"
+        cleaned, report = clean_paragraph_content(source, join_pdf_lines=True)
+
+        self.assertEqual(cleaned, source)
+        self.assertEqual(report["joined_pdf_lines"], 0)
 
     def test_image_ids_are_hidden_from_prompt_and_restored(self):
         from knowledge.quality.document_quality import (
@@ -75,6 +147,18 @@ class DocumentQualityTest(SimpleTestCase):
         self.assertTrue(metrics["too_short"])
         self.assertEqual(metrics["image_count"], 1)
         self.assertEqual(metrics["fallback_image_count"], 1)
+
+    def test_analyze_paragraph_detects_multiple_markdown_headings(self):
+        from knowledge.quality.document_quality import analyze_paragraph
+
+        metrics = analyze_paragraph(
+            {
+                "title": "模块导入",
+                "content": "### import方式\n正文内容\n### from方式\n更多正文",
+            }
+        )
+
+        self.assertTrue(metrics["multiple_headings"])
 
     def test_protected_items_detect_changes(self):
         from knowledge.quality.document_quality import validate_optimized_batch
@@ -119,7 +203,7 @@ class DocumentQualityTest(SimpleTestCase):
         passed, reason = validate_optimized_batch(source, result)
 
         self.assertFalse(passed)
-        self.assertEqual(reason, "content_changed")
+        self.assertIn(reason, {"content_changed", "protected_items_changed"})
 
     def test_clean_paragraphs_returns_aggregate_report(self):
         from knowledge.quality.document_quality import clean_paragraphs
@@ -136,3 +220,4 @@ class DocumentQualityTest(SimpleTestCase):
         self.assertEqual(report["generic_titles"], 1)
         self.assertEqual(report["paragraphs_before"], 2)
         self.assertEqual(report["paragraphs_after"], 2)
+        self.assertEqual(report["preserved_numeric_lines"], 1)

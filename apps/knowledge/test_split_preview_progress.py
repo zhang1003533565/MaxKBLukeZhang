@@ -13,6 +13,10 @@ class SplitPreviewProgressTest(SimpleTestCase):
         self.assertEqual(calculate_split_progress("filtering", 5, 10), 15)
         self.assertEqual(calculate_split_progress("vision", 1, 4), 35)
         self.assertEqual(calculate_split_progress("splitting", 1, 2), 89)
+        self.assertEqual(calculate_split_progress("quality_cleaning", 0, 0), 5)
+        self.assertEqual(calculate_split_progress("quality_analyzing", 0, 0), 10)
+        self.assertEqual(calculate_split_progress("quality_optimizing", 2, 4), 50)
+        self.assertEqual(calculate_split_progress("quality_validating", 4, 4), 95)
         self.assertEqual(calculate_split_progress("completed", 1, 1), 100)
 
     @patch("knowledge.task.split_preview.cache")
@@ -324,3 +328,46 @@ class SplitPreviewProgressTest(SimpleTestCase):
         )
         self.assertEqual(second_file_call.kwargs["total"], 18)
         self.assertGreater(second_file_call.kwargs["progress"], 50)
+
+    @patch("knowledge.serializers.document.DocumentSerializers.Split")
+    @patch("knowledge.task.split_preview.update_split_task_state")
+    @patch("knowledge.task.split_preview.QuerySet")
+    def test_quality_stages_have_explicit_upload_progress(
+        self, query_set, update_state, split_serializer
+    ):
+        from knowledge.task.split_preview import split_document_preview_task
+
+        input_file = SimpleNamespace(
+            id="file-1", file_name="one.pdf", get_bytes=lambda: b"one"
+        )
+        filtered = MagicMock()
+        filtered.__iter__.return_value = [input_file]
+        query_set.return_value.filter.return_value = filtered
+
+        def parse(_parse_data):
+            callback = split_serializer.call_args.kwargs["context"]["progress_callback"]
+            callback("splitting", 1, 1, "splitting")
+            callback("quality_cleaning", 0, 0, "cleaning")
+            callback("quality_analyzing", 0, 0, "analyzing")
+            callback("quality_optimizing", 1, 2, "optimizing")
+            callback("quality_validating", 2, 2, "validating")
+            return []
+
+        split_serializer.return_value.parse.side_effect = parse
+
+        split_document_preview_task.run(
+            "task-1",
+            "user-1",
+            "workspace-1",
+            "knowledge-1",
+            ["file-1"],
+            {"split_strategy": "llm_text", "quality_optimize": True},
+        )
+
+        progress_by_message = {
+            call.kwargs.get("message"): call.kwargs.get("progress")
+            for call in update_state.call_args_list
+        }
+        self.assertLess(progress_by_message["splitting"], progress_by_message["cleaning"])
+        self.assertLess(progress_by_message["analyzing"], progress_by_message["optimizing"])
+        self.assertLess(progress_by_message["optimizing"], progress_by_message["validating"])

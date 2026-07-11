@@ -15,7 +15,8 @@ export default {
     before: 'Before',
     after: 'After',
     reportTitle: 'Optimization report',
-    report: 'Removed {removed_noise} noise items, rewrote {titles_rewritten} titles, split {split_paragraphs}, rolled back {fallback_batches} batches',
+    report: 'Removed {removed_noise} noise items ({removed_page_numbers} page numbers, {removed_duplicates} duplicates), joined {joined_pdf_lines} wrapped lines, kept {preserved_numeric_lines} uncertain numeric lines; rewrote {titles_rewritten} titles, split {split_paragraphs}, merged {merged_paragraphs}, rolled back {fallback_batches} batches',
+    counts: 'Processed {processed} / {total} batches · {remaining} remaining',
   },
   uploadDocument: 'Upload Document',
   importDocument: 'Import Document',
@@ -134,7 +135,7 @@ export default {
     quality: {
       label: 'High-quality optimization (uses additional text model calls)',
       reportTitle: 'Quality optimization report',
-      report: 'Removed {removed_noise} noise items, rewrote {titles_rewritten} titles, split {split_paragraphs}, merged {merged_paragraphs}, rolled back {fallback_batches} batches, {fallback_images} images need review',
+      report: 'Removed {removed_noise} noise items ({removed_page_numbers} page numbers, {removed_duplicates} duplicates), joined {joined_pdf_lines} wrapped lines, kept {preserved_numeric_lines} uncertain numeric lines; rewrote {titles_rewritten} titles, split {split_paragraphs}, merged {merged_paragraphs}, rolled back {fallback_batches} batches, {fallback_images} images need review',
     },
     progress: {
       uploading: 'Uploading document',

@@ -347,6 +347,10 @@ const qualityReport = computed(() => {
       merged_paragraphs: 0,
       fallback_batches: 0,
       fallback_images: 0,
+      removed_page_numbers: 0,
+      preserved_numeric_lines: 0,
+      joined_pdf_lines: 0,
+      removed_duplicates: 0,
     } as Record<string, number>,
   )
 })

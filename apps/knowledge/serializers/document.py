@@ -1211,16 +1211,117 @@ class DocumentSerializers(serializers.Serializer):
             task_id = self.context.get("split_preview_task_id")
             return {"split_preview_task_id": str(task_id)} if task_id else {}
 
+        @staticmethod
+        def _build_quality_work_units(paragraphs):
+            max_batch_characters = 4000
+            max_batch_images = 12
+            units = []
+            index = 0
+            while index < len(paragraphs):
+                paragraph = paragraphs[index]
+                title = str(paragraph.get("title") or "").strip()
+                duplicate_batch = [paragraph]
+                next_index = index + 1
+                while title and next_index < len(paragraphs):
+                    candidate = paragraphs[next_index]
+                    if str(candidate.get("title") or "").strip() != title:
+                        break
+                    proposed = duplicate_batch + [candidate]
+                    if (
+                        sum(len(str(item.get("content") or "")) for item in proposed)
+                        > max_batch_characters
+                        or sum(analyze_paragraph(item)["image_count"] for item in proposed)
+                        > max_batch_images
+                    ):
+                        break
+                    duplicate_batch.append(candidate)
+                    next_index += 1
+                if len(duplicate_batch) > 1:
+                    units.append((True, duplicate_batch))
+                    index += len(duplicate_batch)
+                    continue
+
+                metrics = analyze_paragraph(paragraph)
+                has_duplicate_neighbor = any(
+                    0 <= neighbor_index < len(paragraphs)
+                    and str(paragraphs[neighbor_index].get("title") or "").strip()
+                    == title
+                    for neighbor_index in (index - 1, index + 1)
+                )
+                needs_optimization = any(
+                    metrics[key]
+                    for key in (
+                        "generic_title",
+                        "too_short",
+                        "too_long",
+                        "multiple_headings",
+                    )
+                ) or bool(title and has_duplicate_neighbor)
+                batch = [paragraph]
+                if metrics["too_short"] and index + 1 < len(paragraphs):
+                    candidate = paragraphs[index + 1]
+                    proposed_characters = len(str(paragraph.get("content") or "")) + len(
+                        str(candidate.get("content") or "")
+                    )
+                    proposed_images = metrics["image_count"] + analyze_paragraph(candidate)[
+                        "image_count"
+                    ]
+                    if (
+                        proposed_characters <= max_batch_characters
+                        and proposed_images <= max_batch_images
+                    ):
+                        batch.append(candidate)
+                        index += 1
+                units.append((needs_optimization, batch))
+                index += 1
+            return units
+
+        @staticmethod
+        def _quality_source_ids(batch, accepted):
+            source_ranges = []
+            offset = 0
+            for paragraph in batch:
+                content = str(paragraph.get("content") or "").strip()
+                source_ranges.append(
+                    (
+                        offset,
+                        offset + len(content),
+                        str(paragraph["id"]) if paragraph.get("id") else None,
+                    )
+                )
+                offset += len(content)
+
+            result = []
+            offset = 0
+            for item in accepted:
+                content = str(item.get("content") or "").strip()
+                result_end = offset + len(content)
+                overlapping_ids = [
+                    source_id
+                    for source_start, source_end, source_id in source_ranges
+                    if source_id is not None
+                    and offset < source_end
+                    and result_end > source_start
+                ]
+                result.append(overlapping_ids)
+                offset = result_end
+            return result
+
         def _quality_optimize_paragraphs(
             self, document_name, paragraphs, enabled, model_id
         ):
-            cleaned, report = clean_paragraphs(paragraphs)
+            self._report_progress("quality_cleaning", 0, 0, "正在清洗分段噪声")
+            cleaned, report = clean_paragraphs(
+                paragraphs, str(document_name or "").lower().endswith(".pdf")
+            )
             report.update(
                 {
                     "titles_rewritten": 0,
                     "split_paragraphs": 0,
                     "merged_paragraphs": 0,
                     "fallback_batches": 0,
+                    "processed_batches": 0,
+                    "total_batches": 0,
                 }
             )
             if not enabled:
@@ -1228,22 +1329,14 @@ class DocumentSerializers(serializers.Serializer):
             if not model_id:
                 raise AppApiException(500, _("Model is not allowed to be empty"))
 
-            work_units = []
-            index = 0
-            while index < len(cleaned):
-                paragraph = cleaned[index]
-                metrics = analyze_paragraph(paragraph)
-                needs_optimization = any(
-                    metrics[key] for key in ("generic_title", "too_short", "too_long")
-                )
-                batch = [paragraph]
-                if metrics["too_short"] and index + 1 < len(cleaned):
-                    batch.append(cleaned[index + 1])
-                    index += 1
-                work_units.append((needs_optimization, batch))
-                index += 1
+            self._report_progress("quality_analyzing", 0, 0, "正在分析分段质量")
+            work_units = self._build_quality_work_units(cleaned)
             candidate_count = sum(needs for needs, _batch in work_units)
+            report["total_batches"] = candidate_count
             if not candidate_count:
+                self._report_progress(
+                    "quality_validating", 0, 0, "质量校验完成"
+                )
                 return cleaned, report
 
             model = self._get_model(model_id, ModelTypeConst.LLM.name)
@@ -1303,21 +1396,15 @@ class DocumentSerializers(serializers.Serializer):
                             fallback["source_paragraph_ids"] = [str(paragraph["id"])]
                         optimized.append(fallback)
                 else:
-                    source_ids = [
-                        str(paragraph["id"])
-                        for paragraph in batch
-                        if paragraph.get("id")
-                    ]
+                    source_ids_by_result = self._quality_source_ids(batch, accepted)
                     for accepted_index, item in enumerate(accepted):
                         item["is_active"] = all(
                             paragraph.get("is_active", True) for paragraph in batch
                         )
-                        if source_ids:
-                            item["source_paragraph_ids"] = (
-                                [source_ids[accepted_index]]
-                                if len(accepted) == len(batch)
-                                else source_ids
-                            )
+                        if source_ids_by_result[accepted_index]:
+                            item["source_paragraph_ids"] = source_ids_by_result[
+                                accepted_index
+                            ]
                     report["titles_rewritten"] += sum(
                         item["title"] != paragraph.get("title")
                         for item, paragraph in zip(accepted, batch)
@@ -1330,11 +1417,12 @@ class DocumentSerializers(serializers.Serializer):
                     )
                     optimized.extend(accepted)
                 completed += 1
+                report["processed_batches"] = completed
                 self._report_progress(
                     "quality_optimizing",
                     completed,
                     candidate_count,
-                    f"正在优化分段质量，第 {completed}/{candidate_count} 批",
+                    f"正在优化分段质量，第 {completed}/{candidate_count} 批，回退 {report['fallback_batches']} 批",
                 )
             report["paragraphs_after"] = len(optimized)
             self._report_progress(

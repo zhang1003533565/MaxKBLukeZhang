@@ -84,6 +84,52 @@ class DocumentVisionSplitTest(SimpleTestCase):
         self.assertEqual(report["fallback_batches"], 0)
         model.invoke.assert_called_once()
 
+    def test_quality_optimization_skips_normal_paragraph(self):
+        content = "这是一个主题完整且长度合适的知识段落。" * 12
+        self.serializer._get_model = Mock()
+
+        paragraphs, report = self.serializer._quality_optimize_paragraphs(
+            "chapter.pdf",
+            [{"title": "Python模块导入规则", "content": content}],
+            True,
+            "model-1",
+        )
+
+        self.assertEqual(paragraphs[0]["content"], content)
+        self.assertEqual(report["total_batches"], 0)
+        self.serializer._get_model.assert_not_called()
+
+    def test_quality_optimization_batches_adjacent_duplicate_titles(self):
+        first = "第一种帮助查询方式说明。" * 12
+        second = "第二种帮助查询方式说明。" * 12
+        model = Mock()
+        model.invoke.return_value = SimpleNamespace(
+            content=json.dumps(
+                {
+                    "paragraphs": [
+                        {"title": "使用help查询内置函数", "content": first},
+                        {"title": "退出交互式帮助系统", "content": second},
+                    ]
+                }
+            )
+        )
+        self.serializer._get_model = Mock(return_value=model)
+
+        paragraphs, report = self.serializer._quality_optimize_paragraphs(
+            "chapter.pdf",
+            [
+                {"id": "p1", "title": "在线帮助和相关资源", "content": first},
+                {"id": "p2", "title": "在线帮助和相关资源", "content": second},
+            ],
+            True,
+            "model-1",
+        )
+
+        self.assertEqual(report["total_batches"], 1)
+        self.assertEqual(model.invoke.call_count, 1)
+        self.assertEqual(paragraphs[0]["source_paragraph_ids"], ["p1"])
+        self.assertEqual(paragraphs[1]["source_paragraph_ids"], ["p2"])
+
     def test_quality_optimization_retries_invalid_json_and_merges_adjacent_short_paragraphs(self):
         first = "第一段内容" * 14
         second = "第二段内容" * 14
@@ -140,6 +186,42 @@ class DocumentVisionSplitTest(SimpleTestCase):
         )
 
         self.assertEqual(paragraphs[0]["source_paragraph_ids"], ["p1"])
+        self.assertEqual(paragraphs[1]["source_paragraph_ids"], ["p2"])
+
+    def test_quality_optimization_maps_provenance_by_content_span(self):
+        first = "第一段内容" * 20
+        second = "第二段内容" * 40
+        boundary = len(second) // 2
+        model = Mock()
+        model.invoke.return_value = SimpleNamespace(
+            content=json.dumps(
+                {
+                    "paragraphs": [
+                        {
+                            "title": "跨边界的第一个主题",
+                            "content": first + second[:boundary],
+                        },
+                        {
+                            "title": "第二个主题的剩余内容",
+                            "content": second[boundary:],
+                        },
+                    ]
+                }
+            )
+        )
+        self.serializer._get_model = Mock(return_value=model)
+
+        paragraphs, _report = self.serializer._quality_optimize_paragraphs(
+            "chapter.pdf",
+            [
+                {"id": "p1", "title": "相同标题", "content": first},
+                {"id": "p2", "title": "相同标题", "content": second},
+            ],
+            True,
+            "model-1",
+        )
+
+        self.assertEqual(paragraphs[0]["source_paragraph_ids"], ["p1", "p2"])
         self.assertEqual(paragraphs[1]["source_paragraph_ids"], ["p2"])
 
     @patch("knowledge.serializers.document.QuerySet")

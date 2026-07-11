@@ -13,8 +13,11 @@ IMAGE_ID_PATTERN = re.compile(r"(!\[[^]]*\]\(\./oss/(?:image|file)/)([^)]+)(\))"
 URL_PATTERN = re.compile(r"https?://[^\s)]+")
 IMAGE_DESCRIPTION_PATTERN = re.compile(r"^图片说明：.+$", re.MULTILINE)
 CODE_LINE_PATTERN = re.compile(
-    r"^(?:>>>|\.\.\.|import\s|from\s|def\s|class\s|print\s*\(|pip\s+install\s|[\w.-]+\s*=).+$",
-    re.MULTILINE,
+    r"^(?:>>>|\.\.\.|import\s|from\s|def\s|class\s|print\s*\(|pip\s+install\s|"
+    r"if\s|elif\s|else\s*:|for\s|while\s|return(?:\s|$)|try\s*:|except\s|with\s|"
+    r"raise\s|yield\s|async\s|await\s|SELECT\s|FROM\s|WHERE\s|INSERT\s|UPDATE\s|"
+    r"DELETE\s|CREATE\s|ALTER\s|DROP\s|[\w.-]+\s*=).+$",
+    re.MULTILINE | re.IGNORECASE,
 )
 FENCED_CODE_PATTERN = re.compile(r"```[\s\S]*?```")
 
@@ -22,8 +25,14 @@ FENCED_CODE_PATTERN = re.compile(r"```[\s\S]*?```")
 def _is_noise_line(line):
     stripped = line.strip()
     return bool(
-        re.fullmatch(r"第\s*\d{1,3}\s*页", stripped)
+        _is_explicit_page_line(stripped)
         or stripped.lower() == "www.themegallery.com"
+    )
+
+
+def _is_explicit_page_line(line):
+    return bool(
+        re.fullmatch(r"(?:#{1,6}\s*)?第\s*\d{1,3}\s*页", str(line).strip())
     )
 
 
@@ -31,41 +40,120 @@ def _is_decorative_separator(line):
     return bool(re.fullmatch(r"[\s\-_=*·•—–]{4,}", line))
 
 
-def clean_paragraph_content(content):
-    removed_noise = 0
+def _is_plain_chinese_line(line):
+    stripped = line.strip()
+    return bool(
+        stripped
+        and not stripped.startswith(("#", "- ", "图片说明：", "![", "http"))
+        and re.search(r"[\u4e00-\u9fff]$", stripped)
+    )
+
+
+def _join_pdf_wrapped_lines(lines, protected_lines):
+    joined_lines = []
+    joined_count = 0
+    index = 0
+    while index < len(lines):
+        current = lines[index]
+        current_indexes = [index]
+        next_index = index + 1
+        while next_index < len(lines):
+            next_line = lines[next_index]
+            if (
+                all(item not in protected_lines for item in current_indexes)
+                and next_index not in protected_lines
+                and _is_plain_chinese_line(current)
+                and re.match(r"^[\u4e00-\u9fff]", next_line.strip())
+                and not current.rstrip().endswith(("。", "！", "？", "：", "；", "，"))
+                and len(current.strip()) <= 30
+                and len(next_line.strip()) <= 60
+            ):
+                current = current.rstrip() + next_line.lstrip()
+                current_indexes.append(next_index)
+                joined_count += 1
+                next_index += 1
+                continue
+            break
+        joined_lines.append(current)
+        index = next_index
+    return joined_lines, joined_count
+
+
+def clean_paragraph_content(content, title="", join_pdf_lines=False):
+    report = {
+        "removed_noise": 0,
+        "removed_page_numbers": 0,
+        "preserved_numeric_lines": 0,
+        "joined_pdf_lines": 0,
+        "removed_duplicates": 0,
+    }
     cleaned_lines = []
+    protected_lines = set()
     in_fenced_code = False
     previous_line = None
-    for line in str(content or "").splitlines():
+    source_lines = str(content or "").splitlines()
+    normalized_title = str(title or "").strip()
+    in_image_description = False
+    for index, line in enumerate(source_lines):
         if line.lstrip().startswith("```"):
             in_fenced_code = not in_fenced_code
             cleaned_lines.append(line)
+            protected_lines.add(len(cleaned_lines) - 1)
             continue
         if in_fenced_code:
             cleaned_lines.append(line)
+            protected_lines.add(len(cleaned_lines) - 1)
             continue
+        if not line.strip():
+            in_image_description = False
         if _is_noise_line(line):
-            removed_noise += 1
+            report["removed_noise"] += 1
+            if re.search(r"第\s*\d{1,3}\s*页", line):
+                report["removed_page_numbers"] += 1
             continue
+        if re.fullmatch(r"\s*\d{1,3}\s*", line):
+            report["preserved_numeric_lines"] += 1
         if _is_decorative_separator(line):
-            removed_noise += 1
+            report["removed_noise"] += 1
             continue
         normalized = re.sub(
             rf"^\s*[{re.escape(PRIVATE_BULLETS)}]\s*", "- ", line.rstrip()
         )
         stripped = normalized.strip()
-        if (
-            stripped
-            and stripped == previous_line
-            and (len(stripped) <= 80 or stripped.startswith("图片说明："))
+        comparable = re.sub(r"^#{1,6}\s*", "", stripped)
+        if normalized_title and comparable == normalized_title and not cleaned_lines:
+            report["removed_noise"] += 1
+            report["removed_duplicates"] += 1
+            continue
+        if normalized_title and comparable == normalized_title and all(
+            not existing.strip() for existing in cleaned_lines
         ):
-            removed_noise += 1
+            report["removed_noise"] += 1
+            report["removed_duplicates"] += 1
+            continue
+        if stripped.startswith("图片说明：") and stripped == previous_line:
+            report["removed_noise"] += 1
+            report["removed_duplicates"] += 1
             continue
         cleaned_lines.append(normalized)
+        if stripped.startswith("图片说明："):
+            in_image_description = True
+        if (
+            in_image_description
+            or stripped.startswith(("![", "http"))
+            or CODE_LINE_PATTERN.fullmatch(stripped)
+        ):
+            protected_lines.add(len(cleaned_lines) - 1)
         previous_line = stripped or previous_line
+    joined_count = 0
+    if join_pdf_lines:
+        cleaned_lines, joined_count = _join_pdf_wrapped_lines(
+            cleaned_lines, protected_lines
+        )
+    report["joined_pdf_lines"] = joined_count
     cleaned = "\n".join(cleaned_lines)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
-    return cleaned, {"removed_noise": removed_noise}
+    return cleaned, report
 
 
 def is_generic_title(title):
@@ -84,10 +172,12 @@ def analyze_paragraph(paragraph):
         "too_short": length < 120,
         "too_long": length > 900,
         "hard_too_long": length > 1400,
+        "multiple_headings": len(re.findall(r"^#{1,6}\s+.+$", content, re.MULTILINE)) > 1,
+        "duplicate_title": bool(paragraph.get("_duplicate_title")),
     }
 
 
-def clean_paragraphs(paragraphs):
+def clean_paragraphs(paragraphs, join_pdf_lines=False):
     cleaned = []
     report = {
         "paragraphs_before": len(paragraphs),
@@ -95,12 +185,25 @@ def clean_paragraphs(paragraphs):
         "removed_noise": 0,
         "generic_titles": 0,
         "fallback_images": 0,
+        "removed_page_numbers": 0,
+        "preserved_numeric_lines": 0,
+        "joined_pdf_lines": 0,
+        "removed_duplicates": 0,
     }
     for paragraph in paragraphs:
         item = dict(paragraph)
-        item["content"], clean_report = clean_paragraph_content(item.get("content"))
+        item["content"], clean_report = clean_paragraph_content(
+            item.get("content"), item.get("title"), join_pdf_lines
+        )
         metrics = analyze_paragraph(item)
         report["removed_noise"] += clean_report["removed_noise"]
+        for key in (
+            "removed_page_numbers",
+            "preserved_numeric_lines",
+            "joined_pdf_lines",
+            "removed_duplicates",
+        ):
+            report[key] += clean_report[key]
         report["generic_titles"] += int(metrics["generic_title"])
         report["fallback_images"] += metrics["fallback_image_count"]
         cleaned.append(item)

@@ -47,6 +47,14 @@ def calculate_split_progress(stage, processed=0, total=0):
         return 100
     if stage == "splitting":
         return 80 + int(19 * processed / total) if total else 80
+    if stage == "quality_validating":
+        return 95
+    if stage == "quality_optimizing":
+        return 10 + int(80 * processed / total) if total else 10
+    if stage == "quality_analyzing":
+        return 10
+    if stage == "quality_cleaning":
+        return 5
     if stage == "vision":
         return 20 + int(60 * processed / total) if total else 20
     if stage == "filtering":
@@ -203,21 +211,38 @@ def split_document_preview_task(
         cumulative_total = active_base + total
         stage_occurrences[stage] = max(stage_occurrences.get(stage, 0), cumulative_total)
 
-        stage_start, stage_weight = {
-            "filtering": (0.05, 0.1),
-            "vision": (0.15, 0.65),
-            "splitting": (0.8, 0.19),
-        }.get(stage, (0.0, 0.0))
+        quality_enabled = bool(split_config.get("quality_optimize"))
+        stage_weights = (
+            {
+                "filtering": (0.05, 0.1),
+                "vision": (0.15, 0.53),
+                "splitting": (0.68, 0.14),
+                "quality_cleaning": (0.83, 0.02),
+                "quality_analyzing": (0.85, 0.02),
+                "quality_optimizing": (0.87, 0.11),
+                "quality_validating": (0.98, 0.01),
+            }
+            if quality_enabled
+            else {
+                "filtering": (0.05, 0.1),
+                "vision": (0.15, 0.65),
+                "splitting": (0.8, 0.19),
+            }
+        )
+        stage_start, stage_weight = stage_weights.get(stage, (0.0, 0.0))
         stage_fraction = processed / total if total else 0
         file_fraction = min(stage_start + stage_weight * stage_fraction, 0.99)
         overall_progress = int(
             5 + 94 * min((completed_files + file_fraction) / file_count, 1)
         )
 
-        if total and processed >= total and not active_complete:
+        if quality_enabled and stage == "quality_validating" and not active_complete:
+            active_complete = True
+            completed_files = min(completed_files + 1, file_count)
+        elif total and processed >= total and not active_complete:
             active_complete = True
             stage_occurrences[stage] = active_base + total
-            if stage == "splitting":
+            if stage == "splitting" and not quality_enabled:
                 completed_files = min(completed_files + 1, file_count)
 
         state = update_split_task_state(

@@ -5,6 +5,26 @@ from django.test import SimpleTestCase
 
 
 class DocumentQualityTaskTest(SimpleTestCase):
+    @patch("common.event.listener_manage.ListenerManagement.update_status")
+    @patch("common.event.listener_manage.native_search")
+    @patch("common.event.listener_manage.VectorStore.get_embedding_vector")
+    def test_strict_paragraph_embedding_propagates_vector_failure(
+        self, embedding_vector, native_search, _update_status
+    ):
+        from common.event.listener_manage import ListenerManagement
+
+        native_search.return_value = [{"content": "text"}]
+        embedding_vector.return_value.batch_save.side_effect = RuntimeError(
+            "vector failed"
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "vector failed"):
+            ListenerManagement.embedding_by_paragraph(
+                "11111111-1111-1111-1111-111111111111",
+                MagicMock(),
+                raise_on_error=True,
+            )
+
     @patch("common.event.listener_manage.RedisLock")
     def test_strict_embedding_raises_when_document_lock_is_unavailable(self, redis_lock):
         from common.event.listener_manage import ListenerManagement
