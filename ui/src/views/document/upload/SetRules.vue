@@ -274,6 +274,7 @@ const progressTip = computed(() => {
 
 const firstChecked = ref(true)
 let pollingTimer: ReturnType<typeof setTimeout> | undefined
+let pollingFailureCount = 0
 
 const form = reactive<{
   patterns: Array<string>
@@ -403,6 +404,7 @@ function pollSplitTask(backendTaskId: string, taskId: string) {
       if (knowledge.documentUploadDraft?.taskId !== taskId) {
         return
       }
+      pollingFailureCount = 0
       const task = res.data || {}
       if (task.status === 'completed') {
         const list = postParagraphList(task.result || [])
@@ -441,13 +443,19 @@ function pollSplitTask(backendTaskId: string, taskId: string) {
       pollingTimer = setTimeout(() => pollSplitTask(backendTaskId, taskId), 1000)
     })
     .catch(() => {
-      if (knowledge.documentUploadDraft?.taskId === taskId) {
-        loading.value = false
-        knowledge.patchDocumentUploadDraft({
-          status: 'failed',
-          message: t('views.document.setRules.progress.expired'),
-        })
+      if (knowledge.documentUploadDraft?.taskId !== taskId) {
+        return
       }
+      pollingFailureCount += 1
+      if (pollingFailureCount < 3) {
+        pollingTimer = setTimeout(() => pollSplitTask(backendTaskId, taskId), 2000)
+        return
+      }
+      loading.value = false
+      knowledge.patchDocumentUploadDraft({
+        status: 'failed',
+        message: t('views.document.setRules.progress.expired'),
+      })
     })
 }
 
@@ -477,6 +485,7 @@ function splitDocument() {
   }
   loading.value = true
   stopPolling()
+  pollingFailureCount = 0
   const fd = new FormData()
   const uploadFiles = documentsFiles.value.filter((item) => item?.raw)
   const totalSize = uploadFiles.reduce((sum, item) => sum + (item.size || item.raw?.size || 0), 0)
@@ -550,7 +559,9 @@ function splitDocument() {
     })
   }
 
-  const request = loadSharedApi({ type: 'document', systemType: apiType.value })
+  const documentApi = loadSharedApi({ type: 'document', systemType: apiType.value })
+  const request = apiType.value === 'workspace'
+    ? documentApi
     .postSplitDocumentTask(id, fd, onUploadProgress)
     .then((res: any) => {
       const backendTaskId = res.data?.task_id
@@ -571,6 +582,26 @@ function splitDocument() {
       patchCurrentDraft({
         status: 'failed',
         progress: draftProgress.value,
+        message: t('views.document.setRules.progress.failed'),
+      })
+    })
+    : documentApi.postSplitDocument(id, fd, loading).then((res: any) => {
+      const list = postParagraphList(res.data || [])
+      paragraphList.value = list
+      loading.value = false
+      patchCurrentDraft({
+        status: 'ready',
+        progress: 100,
+        stage: 'completed',
+        processed: list.length,
+        total: list.length,
+        remaining: 0,
+        paragraphList: list,
+      })
+    }).catch(() => {
+      loading.value = false
+      patchCurrentDraft({
+        status: 'failed',
         message: t('views.document.setRules.progress.failed'),
       })
     })
