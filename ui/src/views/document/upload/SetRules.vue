@@ -107,6 +107,11 @@
                       showFooter
                       :model-type="'LLM'"
                     />
+                    <el-switch
+                      v-model="form.quality_optimize"
+                      class="mt-16"
+                      :active-text="$t('views.document.setRules.quality.label')"
+                    />
                   </div>
                 </el-card>
                 <el-card shadow="never" class="mb-16" :class="radio === '4' ? 'border-active' : ''">
@@ -139,6 +144,11 @@
                       @submitModel="getSelectModel('LLM')"
                       showFooter
                       :model-type="'LLM'"
+                    />
+                    <el-switch
+                      v-model="form.quality_optimize"
+                      class="mt-16"
+                      :active-text="$t('views.document.setRules.quality.label')"
                     />
                   </div>
                 </el-card>
@@ -181,6 +191,14 @@
         </div>
 
         <div v-loading="loading">
+          <el-alert
+            v-if="qualityReport"
+            class="mb-16"
+            type="success"
+            :closable="false"
+            :title="$t('views.document.setRules.quality.reportTitle')"
+            :description="qualityReportText"
+          />
           <ParagraphPreview v-model:data="paragraphList" :isConnect="checkedConnect" :knowledge-id="id"/>
         </div>
       </el-col>
@@ -300,6 +318,7 @@ const form = reactive<{
   with_filter: boolean
   llm_model_id: string
   vision_model_id: string
+  quality_optimize: boolean
   [propName: string]: any
 }>({
   patterns: [],
@@ -307,6 +326,36 @@ const form = reactive<{
   with_filter: true,
   llm_model_id: '',
   vision_model_id: '',
+  quality_optimize: false,
+})
+const qualityReport = computed(() => {
+  const reports = paragraphList.value.map((item) => item.quality_report).filter(Boolean)
+  if (!reports.length) {
+    return null
+  }
+  return reports.reduce(
+    (total, report) => {
+      Object.keys(total).forEach((key) => {
+        total[key] += Number(report[key] || 0)
+      })
+      return total
+    },
+    {
+      removed_noise: 0,
+      titles_rewritten: 0,
+      split_paragraphs: 0,
+      merged_paragraphs: 0,
+      fallback_batches: 0,
+      fallback_images: 0,
+    } as Record<string, number>,
+  )
+})
+const qualityReportText = computed(() => {
+  const report = qualityReport.value
+  if (!report) {
+    return ''
+  }
+  return t('views.document.setRules.quality.report', report)
 })
 
 const splitStrategy = computed(() => {
@@ -378,6 +427,7 @@ function patchDraftConfig() {
       with_filter: form.with_filter,
       llm_model_id: form.llm_model_id,
       vision_model_id: form.vision_model_id,
+      quality_optimize: form.quality_optimize,
     },
   })
 }
@@ -402,6 +452,7 @@ function applyDraft(draft: DocumentUploadDraft | null) {
   form.with_filter = draft.form?.with_filter ?? true
   form.llm_model_id = draft.form?.llm_model_id || ''
   form.vision_model_id = draft.form?.vision_model_id || ''
+  form.quality_optimize = draft.form?.quality_optimize ?? false
   checkedConnect.value = Boolean(draft.checkedConnect)
   paragraphList.value = draft.paragraphList || []
   loading.value = ['uploading', 'queued', 'processing', 'parsing'].includes(draft.status)
@@ -598,6 +649,7 @@ function splitDocument() {
       fd.append('vision_model_id', form.vision_model_id)
       fd.append('llm_model_id', form.llm_model_id)
     }
+    fd.append('quality_optimize', String(form.quality_optimize))
   }
 
   const taskId = `${Date.now()}-${Math.random()}`
@@ -630,6 +682,7 @@ function splitDocument() {
       with_filter: form.with_filter,
       llm_model_id: form.llm_model_id,
       vision_model_id: form.vision_model_id,
+      quality_optimize: form.quality_optimize,
     },
     updatedAt: Date.now(),
   })

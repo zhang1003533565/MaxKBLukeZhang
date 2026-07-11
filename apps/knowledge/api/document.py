@@ -59,6 +59,10 @@ class DocumentSplitAPI(APIMixin):
                     'llm_model_id': {
                         'type': 'string',
                         'description': 'llm_vision 最终分段阶段使用的文本模型 ID'
+                    },
+                    'quality_optimize': {
+                        'type': 'boolean',
+                        'description': '是否启用额外的高质量语义优化'
                     }
                 }
             }

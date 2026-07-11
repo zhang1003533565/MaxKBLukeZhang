@@ -70,6 +70,15 @@ from knowledge.models import (
     Tag,
     TaskType,
 )
+from knowledge.quality.document_quality import (
+    analyze_paragraph,
+    build_quality_prompt,
+    clean_paragraphs,
+    normalize_quality_result,
+    replace_image_ids_with_aliases,
+    restore_image_aliases,
+    validate_optimized_batch,
+)
 from knowledge.serializers.common import (
     BatchSerializer,
     MetaSerializer,
@@ -205,6 +214,7 @@ class DocumentSplitRequest(serializers.Serializer):
     model_id = serializers.UUIDField(required=False, allow_null=True, label=_("model id"))
     vision_model_id = serializers.UUIDField(required=False, allow_null=True, label=_("vision model id"))
     llm_model_id = serializers.UUIDField(required=False, allow_null=True, label=_("LLM model id"))
+    quality_optimize = serializers.BooleanField(required=False, default=False)
 
 
 class DocumentInstanceQASerializer(serializers.Serializer):
@@ -1120,6 +1130,7 @@ class DocumentSerializers(serializers.Serializer):
             model_id = instance.get("model_id")
             vision_model_id = instance.get("vision_model_id")
             llm_model_id = instance.get("llm_model_id")
+            quality_optimize = bool(instance.get("quality_optimize", False))
             self._validate_model_selection(
                 split_strategy, model_id, vision_model_id, llm_model_id
             )
@@ -1137,6 +1148,7 @@ class DocumentSerializers(serializers.Serializer):
                             model_id,
                             vision_model_id,
                             llm_model_id,
+                            quality_optimize,
                         )
                     )
                 return result_list
@@ -1198,6 +1210,137 @@ class DocumentSerializers(serializers.Serializer):
         def _split_preview_file_meta(self):
             task_id = self.context.get("split_preview_task_id")
             return {"split_preview_task_id": str(task_id)} if task_id else {}
+
+        def _quality_optimize_paragraphs(
+            self, document_name, paragraphs, enabled, model_id
+        ):
+            cleaned, report = clean_paragraphs(paragraphs)
+            report.update(
+                {
+                    "titles_rewritten": 0,
+                    "split_paragraphs": 0,
+                    "merged_paragraphs": 0,
+                    "fallback_batches": 0,
+                }
+            )
+            if not enabled:
+                return cleaned, report
+            if not model_id:
+                raise AppApiException(500, _("Model is not allowed to be empty"))
+
+            work_units = []
+            index = 0
+            while index < len(cleaned):
+                paragraph = cleaned[index]
+                metrics = analyze_paragraph(paragraph)
+                needs_optimization = any(
+                    metrics[key] for key in ("generic_title", "too_short", "too_long")
+                )
+                batch = [paragraph]
+                if metrics["too_short"] and index + 1 < len(cleaned):
+                    batch.append(cleaned[index + 1])
+                    index += 1
+                work_units.append((needs_optimization, batch))
+                index += 1
+            candidate_count = sum(needs for needs, _batch in work_units)
+            if not candidate_count:
+                return cleaned, report
+
+            model = self._get_model(model_id, ModelTypeConst.LLM.name)
+            optimized = []
+            self._report_progress(
+                "quality_optimizing", 0, candidate_count, "正在优化分段质量"
+            )
+            completed = 0
+            for needs_optimization, batch in work_units:
+                if not needs_optimization:
+                    for paragraph in batch:
+                        unchanged = dict(paragraph)
+                        if paragraph.get("id"):
+                            unchanged["source_paragraph_ids"] = [str(paragraph["id"])]
+                        optimized.append(unchanged)
+                    continue
+                source_batch = [
+                    {
+                        "title": paragraph.get("title") or "",
+                        "content": paragraph.get("content") or "",
+                    }
+                    for paragraph in batch
+                ]
+                prompt_batch, alias_to_image_id = replace_image_ids_with_aliases(
+                    source_batch
+                )
+                accepted = None
+                for _attempt in range(2):
+                    response = model.invoke(
+                        [HumanMessage(content=build_quality_prompt(document_name, prompt_batch))]
+                    )
+                    try:
+                        payload = self._loads_json_payload(
+                            self._response_content(response)
+                        )
+                        result = restore_image_aliases(
+                            normalize_quality_result(payload), alias_to_image_id
+                        )
+                        valid, _reason = validate_optimized_batch(
+                            source_batch, result
+                        )
+                    except AppApiException:
+                        continue
+                    if valid:
+                        if len(batch) > 1 and len(result) not in {
+                            1,
+                            len(batch),
+                        }:
+                            continue
+                        accepted = result
+                        break
+                if accepted is None:
+                    report["fallback_batches"] += 1
+                    for paragraph in batch:
+                        fallback = dict(paragraph)
+                        if paragraph.get("id"):
+                            fallback["source_paragraph_ids"] = [str(paragraph["id"])]
+                        optimized.append(fallback)
+                else:
+                    source_ids = [
+                        str(paragraph["id"])
+                        for paragraph in batch
+                        if paragraph.get("id")
+                    ]
+                    for accepted_index, item in enumerate(accepted):
+                        item["is_active"] = all(
+                            paragraph.get("is_active", True) for paragraph in batch
+                        )
+                        if source_ids:
+                            item["source_paragraph_ids"] = (
+                                [source_ids[accepted_index]]
+                                if len(accepted) == len(batch)
+                                else source_ids
+                            )
+                    report["titles_rewritten"] += sum(
+                        item["title"] != paragraph.get("title")
+                        for item, paragraph in zip(accepted, batch)
+                    )
+                    report["split_paragraphs"] += max(
+                        len(accepted) - len(batch), 0
+                    )
+                    report["merged_paragraphs"] += max(
+                        len(batch) - len(accepted), 0
+                    )
+                    optimized.extend(accepted)
+                completed += 1
+                self._report_progress(
+                    "quality_optimizing",
+                    completed,
+                    candidate_count,
+                    f"正在优化分段质量，第 {completed}/{candidate_count} 批",
+                )
+            report["paragraphs_after"] = len(optimized)
+            self._report_progress(
+                "quality_validating", candidate_count, candidate_count, "质量校验完成"
+            )
+            return optimized, report
 
         @classmethod
         def _validate_model_selection(
@@ -1771,6 +1914,20 @@ class DocumentSerializers(serializers.Serializer):
                     )
             return result_list
 
+        def _apply_quality_optimization(
+            self, result_list, quality_optimize, quality_model_id
+        ):
+            for result in result_list:
+                content, report = self._quality_optimize_paragraphs(
+                    result.get("name") or "",
+                    result.get("content") or [],
+                    quality_optimize,
+                    quality_model_id,
+                )
+                result["content"] = content
+                result["quality_report"] = report
+            return result_list
+
         def file_to_paragraph(
             self,
             file,
@@ -1781,6 +1938,7 @@ class DocumentSerializers(serializers.Serializer):
             model_id=None,
             vision_model_id=None,
             llm_model_id=None,
+            quality_optimize=False,
         ):
             # 保存源文件
             file_id = uuid.uuid7()
@@ -1807,7 +1965,7 @@ class DocumentSerializers(serializers.Serializer):
                             file, pattern_list, with_filter, limit, get_buffer, self.save_image
                         )
                     wrapped_result = self._wrap_split_result(result, file_id)
-                    return self._apply_model_split(
+                    model_split_result = self._apply_model_split(
                         wrapped_result,
                         split_strategy,
                         model_id,
@@ -1815,14 +1973,30 @@ class DocumentSerializers(serializers.Serializer):
                         llm_model_id,
                         limit,
                     )
+                    quality_model_id = (
+                        llm_model_id
+                        if split_strategy == self.LLM_VISION_STRATEGY
+                        else model_id
+                    )
+                    return self._apply_quality_optimization(
+                        model_split_result, quality_optimize, quality_model_id
+                    )
             result = default_split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, self.save_image)
-            return self._apply_model_split(
+            model_split_result = self._apply_model_split(
                 self._wrap_split_result(result, file_id),
                 split_strategy,
                 model_id,
                 vision_model_id,
                 llm_model_id,
                 limit,
+            )
+            quality_model_id = (
+                llm_model_id
+                if split_strategy == self.LLM_VISION_STRATEGY
+                else model_id
+            )
+            return self._apply_quality_optimization(
+                model_split_result, quality_optimize, quality_model_id
             )
 
     class SplitPattern(serializers.Serializer):

@@ -1,4 +1,22 @@
 export default {
+  quality: {
+    button: 'Quality optimization',
+    dialogTitle: 'Document quality optimization',
+    modelLabel: 'Text optimization model',
+    start: 'Generate optimization draft',
+    cancel: 'Terminate task',
+    cancelled: 'The quality optimization task was terminated.',
+    failed: 'Quality optimization failed.',
+    retry: 'Try again',
+    pollFailed: 'Unable to load task status. Generate a new draft.',
+    apply: 'Apply optimization',
+    applyConfirm: 'This replaces the current paragraphs and rebuilds embeddings. Continue?',
+    applied: 'Quality optimization applied.',
+    before: 'Before',
+    after: 'After',
+    reportTitle: 'Optimization report',
+    report: 'Removed {removed_noise} noise items, rewrote {titles_rewritten} titles, split {split_paragraphs}, rolled back {fallback_batches} batches',
+  },
   uploadDocument: 'Upload Document',
   importDocument: 'Import Document',
   syncDocument: 'Sync Document',
@@ -112,6 +130,11 @@ export default {
     },
     checkedConnect: {
       label: 'Add "Related Questions" section for question-based QA pairs during import.',
+    },
+    quality: {
+      label: 'High-quality optimization (uses additional text model calls)',
+      reportTitle: 'Quality optimization report',
+      report: 'Removed {removed_noise} noise items, rewrote {titles_rewritten} titles, split {split_paragraphs}, merged {merged_paragraphs}, rolled back {fallback_batches} batches, {fallback_images} images need review',
     },
     progress: {
       uploading: 'Uploading document',

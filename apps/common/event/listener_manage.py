@@ -336,7 +336,9 @@ class ListenerManagement:
             lock.release()
 
     @staticmethod
-    def embedding_by_document(document_id, embedding_model: Embeddings, state_list=None):
+    def embedding_by_document(
+        document_id, embedding_model: Embeddings, state_list=None, raise_on_error=False
+    ):
         """
         向量化文档
         @param state_list:
@@ -348,6 +350,8 @@ class ListenerManagement:
             state_list = [State.PENDING, State.SUCCESS, State.FAILURE, State.REVOKE, State.REVOKED]
         rlock = RedisLock()
         if not rlock.try_lock("embedding:" + str(document_id)):
+            if raise_on_error:
+                raise RuntimeError("Document embedding task is already running")
             return
         try:
 
@@ -390,6 +394,8 @@ class ListenerManagement:
                     document_id=document_id, error=str(e), traceback=traceback.format_exc()
                 )
             )
+            if raise_on_error:
+                raise
         finally:
             ListenerManagement.post_update_document_status(document_id, TaskType.EMBEDDING)
             ListenerManagement.get_aggregation_document_status(document_id)()

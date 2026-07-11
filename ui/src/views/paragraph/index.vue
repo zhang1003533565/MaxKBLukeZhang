@@ -13,6 +13,9 @@
       </el-text>
     </div>
     <div class="header-button" v-if="!shareDisabled && permissionPrecise.doc_edit(id)">
+      <el-button @click="openQualityOptimize" v-if="isBatch === false">
+        {{ $t('views.document.quality.button') }}
+      </el-button>
       <el-button @click="batchSelectedHandle(true)" v-if="isBatch === false">
         {{ $t('views.paragraph.setting.batchSelected') }}
       </el-button>
@@ -210,6 +213,12 @@
       :workspaceId="knowledgeDetail.workspace_id"
     />
     <GenerateRelatedDialog ref="GenerateRelatedDialogRef" @refresh="refresh" :apiType="apiType" />
+    <QualityOptimizeDialog
+      ref="QualityOptimizeDialogRef"
+      :knowledge-id="id"
+      :document-id="documentId"
+      @refresh="() => refresh()"
+    />
   </div>
 </template>
 <script setup lang="ts">
@@ -220,6 +229,7 @@ import ParagraphDialog from './component/ParagraphDialog.vue'
 import ParagraphCard from './component/ParagraphCard.vue'
 import SelectDocumentDialog from './component/SelectDocumentDialog.vue'
 import GenerateRelatedDialog from '@/components/generate-related-dialog/index.vue'
+import QualityOptimizeDialog from './component/QualityOptimizeDialog.vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { MsgSuccess, MsgConfirm } from '@/utils/message'
 import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
@@ -244,10 +254,15 @@ const permissionPrecise = computed(() => {
 
 const SelectDocumentDialogRef = ref()
 const ParagraphDialogRef = ref()
+const QualityOptimizeDialogRef = ref()
 const loading = ref(false)
 const changeStateloading = ref(false)
 const documentDetail = ref<any>({})
 const knowledgeDetail = ref<any>({})
+
+function openQualityOptimize() {
+  QualityOptimizeDialogRef.value.open()
+}
 const paragraphDetail = ref<any[]>([])
 const title = ref('')
 const search = ref('')
@@ -424,7 +439,7 @@ function getParagraphList() {
     })
 }
 
-function refresh(data: any) {
+function refresh(data?: any) {
   if (data) {
     const index = paragraphDetail.value.findIndex((v) => v.id === data.id)
     paragraphDetail.value.splice(index, 1, data)

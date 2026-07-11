@@ -1,4 +1,22 @@
 export default {
+  quality: {
+    button: '质量优化',
+    dialogTitle: '文档质量优化',
+    modelLabel: '文本优化模型',
+    start: '生成优化草稿',
+    cancel: '终止任务',
+    cancelled: '质量优化任务已终止',
+    failed: '质量优化失败',
+    retry: '重新生成',
+    pollFailed: '无法获取任务状态，请重新生成',
+    apply: '应用优化',
+    applyConfirm: '应用后将替换当前段落并重新生成向量，是否继续？',
+    applied: '质量优化已应用',
+    before: '优化前',
+    after: '优化后',
+    reportTitle: '优化报告',
+    report: '清理噪声 {removed_noise} 处，重写标题 {titles_rewritten} 个，拆分 {split_paragraphs} 段，回退 {fallback_batches} 批',
+  },
   uploadDocument: '上传文档',
   importDocument: '导入文档',
   syncDocument: '同步文档',
@@ -106,6 +124,11 @@ export default {
     },
     checkedConnect: {
       label: '导入时添加分段标题为关联问题（适用于标题为问题的问答对）',
+    },
+    quality: {
+      label: '高质量优化（增加文本模型调用）',
+      reportTitle: '质量优化报告',
+      report: '清理噪声 {removed_noise} 处，重写标题 {titles_rewritten} 个，拆分 {split_paragraphs} 段，合并 {merged_paragraphs} 段，回退 {fallback_batches} 批，待检查图片 {fallback_images} 张',
     },
     progress: {
       uploading: '正在上传文档',

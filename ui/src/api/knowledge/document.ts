@@ -505,6 +505,18 @@ const cancelSplitDocumentTask: (
   return del(`${prefix.value}/${knowledge_id}/document/split/task/${task_id}`)
 }
 
+const createDocumentQualityTask = (knowledge_id: string, document_id: string, model_id: string) =>
+  post(`${prefix.value}/${knowledge_id}/document/${document_id}/quality/task`, { model_id })
+
+const getDocumentQualityTask = (knowledge_id: string, document_id: string, task_id: string) =>
+  get(`${prefix.value}/${knowledge_id}/document/${document_id}/quality/task/${task_id}`)
+
+const cancelDocumentQualityTask = (knowledge_id: string, document_id: string, task_id: string) =>
+  del(`${prefix.value}/${knowledge_id}/document/${document_id}/quality/task/${task_id}`)
+
+const applyDocumentQualityTask = (knowledge_id: string, document_id: string, task_id: string) =>
+  post(`${prefix.value}/${knowledge_id}/document/${document_id}/quality/task/${task_id}/apply`)
+
 /**
  * 分段标识列表
  * @param loading 加载器
@@ -687,6 +699,10 @@ export default {
   postSplitDocumentTask,
   getSplitDocumentTask,
   cancelSplitDocumentTask,
+  createDocumentQualityTask,
+  getDocumentQualityTask,
+  cancelDocumentQualityTask,
+  applyDocumentQualityTask,
   listSplitPattern,
   postTableDocument,
   exportQATemplate,

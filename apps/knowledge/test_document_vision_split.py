@@ -48,6 +48,100 @@ class DocumentVisionSplitTest(SimpleTestCase):
         )
         self.assertEqual(self.serializer._split_preview_file_meta(), {})
 
+    def test_quality_optimization_disabled_only_runs_rule_cleanup(self):
+        self.serializer._get_model = Mock()
+
+        paragraphs, report = self.serializer._quality_optimize_paragraphs(
+            "chapter.pdf",
+            [{"title": "标题", "content": "正文\n46\nwww.themegallery.com"}],
+            False,
+            None,
+        )
+
+        self.assertEqual(paragraphs[0]["content"], "正文\n46")
+        self.assertEqual(report["removed_noise"], 1)
+        self.serializer._get_model.assert_not_called()
+
+    def test_quality_optimization_rewrites_generic_title_with_valid_model_result(self):
+        content = "可变参数会把后续参数收集为元组。" * 6
+        model = Mock()
+        model.invoke.return_value = SimpleNamespace(
+            content=json.dumps(
+                {"paragraphs": [{"title": "Python可变参数", "content": content}]}
+            )
+        )
+        self.serializer._get_model = Mock(return_value=model)
+
+        paragraphs, report = self.serializer._quality_optimize_paragraphs(
+            "chapter.pdf",
+            [{"title": "Python实例（二）", "content": content}],
+            True,
+            "model-1",
+        )
+
+        self.assertEqual(paragraphs[0]["title"], "Python可变参数")
+        self.assertEqual(report["titles_rewritten"], 1)
+        self.assertEqual(report["fallback_batches"], 0)
+        model.invoke.assert_called_once()
+
+    def test_quality_optimization_retries_invalid_json_and_merges_adjacent_short_paragraphs(self):
+        first = "第一段内容" * 14
+        second = "第二段内容" * 14
+        model = Mock()
+        model.invoke.side_effect = [
+            SimpleNamespace(content="not-json"),
+            SimpleNamespace(
+                content=json.dumps(
+                    {"paragraphs": [{"title": "合并后的具体主题", "content": first + second}]}
+                )
+            ),
+        ]
+        self.serializer._get_model = Mock(return_value=model)
+
+        paragraphs, report = self.serializer._quality_optimize_paragraphs(
+            "chapter.pdf",
+            [
+                {"id": "p1", "title": "短段一", "content": first},
+                {"id": "p2", "title": "短段二", "content": second},
+            ],
+            True,
+            "model-1",
+        )
+
+        self.assertEqual(len(paragraphs), 1)
+        self.assertEqual(paragraphs[0]["source_paragraph_ids"], ["p1", "p2"])
+        self.assertEqual(report["merged_paragraphs"], 1)
+        self.assertEqual(model.invoke.call_count, 2)
+
+    def test_quality_optimization_keeps_provenance_separate_without_merge(self):
+        first = "第一段内容" * 14
+        second = "第二段内容" * 14
+        model = Mock()
+        model.invoke.return_value = SimpleNamespace(
+            content=json.dumps(
+                {
+                    "paragraphs": [
+                        {"title": "第一个具体主题", "content": first},
+                        {"title": "第二个具体主题", "content": second},
+                    ]
+                }
+            )
+        )
+        self.serializer._get_model = Mock(return_value=model)
+
+        paragraphs, _report = self.serializer._quality_optimize_paragraphs(
+            "chapter.pdf",
+            [
+                {"id": "p1", "title": "短段一", "content": first},
+                {"id": "p2", "title": "短段二", "content": second},
+            ],
+            True,
+            "model-1",
+        )
+
+        self.assertEqual(paragraphs[0]["source_paragraph_ids"], ["p1"])
+        self.assertEqual(paragraphs[1]["source_paragraph_ids"], ["p2"])
+
     @patch("knowledge.serializers.document.QuerySet")
     def test_split_save_image_marks_async_preview_file_for_cleanup(self, query_set):
         serializer = DocumentSerializers.Split(

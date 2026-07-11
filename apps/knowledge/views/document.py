@@ -3,10 +3,13 @@ import uuid_utils.compat as uuid
 from common.auth import TokenAuth
 from common.auth.authentication import has_permissions
 from common.constants.permission_constants import CompareConstants, PermissionConstants, RoleConstants, ViewPermission
+from common.event.listener_manage import ListenerManagement
 from common.exception.app_exception import AppApiException
 from common.log.log import log
 from common.result import result
 from django.utils.translation import gettext_lazy as _
+from django.db import connection, transaction
+from django.db.models import QuerySet
 from drf_spectacular.utils import extend_schema
 from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
@@ -39,9 +42,22 @@ from knowledge.api.document import (
 from knowledge.api.tag import DocsTagDeleteAPI
 from knowledge.serializers.common import get_knowledge_operation_object
 from knowledge.serializers.document import DocumentSerializers
-from knowledge.models import File, FileSourceType
+from knowledge.models import (
+    Document,
+    Embedding,
+    File,
+    FileSourceType,
+    Paragraph,
+    ProblemParagraphMapping,
+    State,
+    TaskType,
+)
+from knowledge.serializers.common import get_embedding_model_id_by_knowledge_id
+from knowledge.task.document_quality import optimize_document_quality_task
+from knowledge.task.embedding import embedding_by_document
 from knowledge.task.split_preview import (
     create_split_task_state,
+    delete_split_task_state,
     force_cancel_split_preview_task,
     get_split_task_state,
     split_document_preview_task,
@@ -70,6 +86,7 @@ def build_document_split_data(request):
         "model_id",
         "vision_model_id",
         "llm_model_id",
+        "quality_optimize",
     ]:
         if field in request.data:
             split_data[field] = request_data.get(field)
@@ -428,6 +445,217 @@ class DocumentView(APIView):
                     data={"knowledge_id": knowledge_id, "workspace_id": workspace_id}
                 ).list()
             )
+
+    class QualityTask(APIView):
+        authentication_classes = [TokenAuth]
+
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_knowledge_permission(),
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_permission_workspace_manage_role(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            ViewPermission(
+                [RoleConstants.USER.get_workspace_role()],
+                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                CompareConstants.AND,
+            ),
+        )
+        def post(
+            self, request: Request, workspace_id: str, knowledge_id: str, document_id: str
+        ):
+            if not QuerySet(Document).filter(
+                id=document_id, knowledge_id=knowledge_id
+            ).exists():
+                raise AppApiException(404, _("Document does not exist"))
+            model_id = request.data.get("model_id")
+            if not model_id:
+                raise AppApiException(500, _("Model is not allowed to be empty"))
+            task_id = str(uuid.uuid7())
+            create_split_task_state(
+                task_id, request.user.id, workspace_id, knowledge_id
+            )
+            update_split_task_state(task_id, document_id=str(document_id))
+            try:
+                async_result = optimize_document_quality_task.delay(
+                    task_id,
+                    str(request.user.id),
+                    workspace_id,
+                    knowledge_id,
+                    document_id,
+                    model_id,
+                )
+            except Exception:
+                update_split_task_state(
+                    task_id,
+                    status="failed",
+                    stage="failed",
+                    message="质量优化任务启动失败",
+                    error="质量优化任务启动失败，请稍后重试",
+                )
+                raise
+            update_split_task_state(task_id, celery_task_id=async_result.id)
+            return result.success({"task_id": task_id, "status": "queued"})
+
+    class QualityTaskStatus(APIView):
+        authentication_classes = [TokenAuth]
+
+        @staticmethod
+        def _state(request, workspace_id, knowledge_id, document_id, task_id):
+            state = get_split_task_state(task_id)
+            if state is None or (
+                state.get("user_id") != str(request.user.id)
+                or state.get("workspace_id") != str(workspace_id)
+                or state.get("knowledge_id") != str(knowledge_id)
+                or state.get("document_id") != str(document_id)
+            ):
+                raise AppApiException(404, _("Quality optimization task does not exist"))
+            return state
+
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_knowledge_permission(),
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_permission_workspace_manage_role(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            ViewPermission(
+                [RoleConstants.USER.get_workspace_role()],
+                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                CompareConstants.AND,
+            ),
+        )
+        def get(self, request, workspace_id, knowledge_id, document_id, task_id):
+            return result.success(
+                self._state(request, workspace_id, knowledge_id, document_id, task_id)
+            )
+
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_knowledge_permission(),
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_permission_workspace_manage_role(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            ViewPermission(
+                [RoleConstants.USER.get_workspace_role()],
+                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                CompareConstants.AND,
+            ),
+        )
+        def delete(self, request, workspace_id, knowledge_id, document_id, task_id):
+            state = self._state(
+                request, workspace_id, knowledge_id, document_id, task_id
+            )
+            if state.get("status") in {"completed", "failed", "cancelled", "applied"}:
+                raise AppApiException(409, _("Quality optimization task is already finished"))
+            cancelled = force_cancel_split_preview_task(task_id)
+            return result.success(
+                {"task_id": task_id, "status": cancelled.get("status")}
+            )
+
+    class QualityTaskApply(APIView):
+        authentication_classes = [TokenAuth]
+
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_knowledge_permission(),
+            PermissionConstants.KNOWLEDGE_DOCUMENT_EDIT.get_workspace_permission_workspace_manage_role(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            ViewPermission(
+                [RoleConstants.USER.get_workspace_role()],
+                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                CompareConstants.AND,
+            ),
+        )
+        @transaction.atomic
+        def post(self, request, workspace_id, knowledge_id, document_id, task_id):
+            state = DocumentView.QualityTaskStatus._state(
+                request, workspace_id, knowledge_id, document_id, task_id
+            )
+            if state.get("status") != "completed" or not state.get("result"):
+                raise AppApiException(409, _("Quality optimization draft is not ready"))
+            document = (
+                QuerySet(Document)
+                .select_for_update()
+                .filter(id=document_id, knowledge_id=knowledge_id)
+                .first()
+            )
+            if document is None:
+                raise AppApiException(404, _("Document does not exist"))
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"LOCK TABLE {Paragraph._meta.db_table} IN SHARE ROW EXCLUSIVE MODE"
+                )
+            current = list(
+                QuerySet(Paragraph)
+                .select_for_update()
+                .filter(document_id=document_id, knowledge_id=knowledge_id)
+                .order_by("position")
+                .values("id", "update_time")
+            )
+            current_snapshot = [
+                {"id": str(item["id"]), "update_time": str(item["update_time"])}
+                for item in current
+            ]
+            if current_snapshot != state["result"].get("snapshot"):
+                raise AppApiException(409, _("Document paragraphs changed, regenerate the draft"))
+
+            old_mappings = list(
+                QuerySet(ProblemParagraphMapping)
+                .filter(document_id=document_id)
+                .values("problem_id", "paragraph_id")
+            )
+            QuerySet(ProblemParagraphMapping).filter(document_id=document_id).delete()
+            QuerySet(Embedding).filter(document_id=document_id).delete()
+            QuerySet(Paragraph).filter(document_id=document_id).delete()
+            paragraphs = [
+                Paragraph(
+                    id=uuid.uuid7(),
+                    document_id=document_id,
+                    knowledge_id=knowledge_id,
+                    title=item.get("title") or "",
+                    content=item.get("content") or "",
+                    position=index,
+                    is_active=item.get("is_active", True),
+                )
+                for index, item in enumerate(state["result"]["after"], start=1)
+            ]
+            Paragraph.objects.bulk_create(paragraphs)
+            source_to_new_paragraph = {}
+            for paragraph, item in zip(paragraphs, state["result"]["after"]):
+                for source_id in item.get("source_paragraph_ids") or []:
+                    source_to_new_paragraph.setdefault(str(source_id), []).append(
+                        paragraph.id
+                    )
+            restored_mappings = [
+                ProblemParagraphMapping(
+                    id=uuid.uuid7(),
+                    knowledge_id=knowledge_id,
+                    document_id=document_id,
+                    problem_id=mapping["problem_id"],
+                    paragraph_id=paragraph_id,
+                )
+                for mapping in old_mappings
+                if str(mapping["paragraph_id"]) in source_to_new_paragraph
+                for paragraph_id in source_to_new_paragraph[
+                    str(mapping["paragraph_id"])
+                ]
+            ]
+            if restored_mappings:
+                ProblemParagraphMapping.objects.bulk_create(restored_mappings)
+            document.char_length = sum(len(paragraph.content) for paragraph in paragraphs)
+            document.save(update_fields=["char_length", "update_time"])
+            ListenerManagement.update_status(
+                QuerySet(Document).filter(id=document_id),
+                TaskType.EMBEDDING,
+                State.PENDING,
+            )
+            ListenerManagement.update_status(
+                QuerySet(Paragraph).filter(document_id=document_id).values("id"),
+                TaskType.EMBEDDING,
+                State.PENDING,
+            )
+            ListenerManagement.get_aggregation_document_status(document_id)()
+            embedding_model_id = get_embedding_model_id_by_knowledge_id(knowledge_id)
+            embedding_by_document.run(
+                document_id, embedding_model_id, raise_on_error=True
+            )
+            transaction.on_commit(
+                lambda: delete_split_task_state(task_id)
+            )
+            return result.success({"paragraph_count": len(paragraphs)})
 
     class BatchEditHitHandling(APIView):
         authentication_classes = [TokenAuth]

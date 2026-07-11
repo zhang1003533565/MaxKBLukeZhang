@@ -38,6 +38,7 @@ export interface DocumentUploadDraft {
     with_filter: boolean
     llm_model_id: string
     vision_model_id: string
+    quality_optimize?: boolean
   }
   message?: string
   updatedAt: number

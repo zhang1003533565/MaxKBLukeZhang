@@ -59,7 +59,7 @@ def embedding_by_paragraph_list(paragraph_id_list, model_id):
 
 
 @celery_app.task(base=QueueOnce, once={"keys": ["document_id"]}, name="celery:embedding_by_document")
-def embedding_by_document(document_id, model_id, state_list=None):
+def embedding_by_document(document_id, model_id, state_list=None, raise_on_error=False):
     """
     向量化文档
     @param state_list:
@@ -89,7 +89,9 @@ def embedding_by_document(document_id, model_id, state_list=None):
 
     embedding_model = get_embedding_model(model_id, exception_handler)
     #
-    ListenerManagement.embedding_by_document(document_id, embedding_model, state_list)
+    ListenerManagement.embedding_by_document(
+        document_id, embedding_model, state_list, raise_on_error
+    )
 
 
 @celery_app.task(name="celery:embedding_by_document_list")
@@ -125,7 +127,7 @@ def embedding_by_knowledge(knowledge_id, model_id):
         for document in document_list:
             try:
                 embedding_by_document.delay(document.id, model_id)
-            except Exception as e:
+            except Exception:
                 pass
     except Exception as e:
         maxkb_logger.error(

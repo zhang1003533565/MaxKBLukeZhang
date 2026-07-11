@@ -83,6 +83,15 @@ def get_split_task_state(task_id):
     return state
 
 
+def delete_split_task_state(task_id):
+    cache.delete_many(
+        [
+            get_split_task_cache_key(task_id),
+            get_split_task_cancelled_cache_key(task_id),
+        ]
+    )
+
+
 def update_split_task_state(task_id, **fields):
     cache_key = get_split_task_cache_key(task_id)
     state = cache.get(cache_key)
@@ -258,6 +267,7 @@ def split_document_preview_task(
             "model_id": split_config.get("model_id"),
             "vision_model_id": split_config.get("vision_model_id"),
             "llm_model_id": split_config.get("llm_model_id"),
+            "quality_optimize": split_config.get("quality_optimize", False),
         }
         if split_config.get("patterns") is not None:
             parse_data["patterns"] = split_config.get("patterns")
