@@ -27,6 +27,7 @@ from common.result import Result
 from maxkb import settings
 from maxkb.conf import PROJECT_DIR
 from maxkb.const import CONFIG
+from knowledge.open_api import views as knowledge_open_api_views
 
 admin_api_prefix = CONFIG.get_admin_path()[1:] + '/api/'
 admin_ui_prefix = CONFIG.get_admin_path()
@@ -45,6 +46,9 @@ urlpatterns = [
     path(admin_api_prefix, include("system_manage.urls")),
     path(admin_api_prefix, include("oss.urls")),
     path("openapi/knowledge/v1/", include("knowledge.open_api.urls")),
+    path("openapi/knowledge/docs", knowledge_open_api_views.KnowledgeOpenAPIDocsPageView.as_view()),
+    path("openapi/knowledge/docs/content", knowledge_open_api_views.KnowledgeOpenAPIDocsContentView.as_view()),
+    path("openapi/knowledge/docs/download", knowledge_open_api_views.KnowledgeOpenAPIDocsDownloadView.as_view()),
     path(f'{admin_ui_prefix[1:]}/', include('oss.retrieval_urls')),
 ]
 

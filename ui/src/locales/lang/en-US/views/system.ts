@@ -206,6 +206,15 @@ export default {
       upload: 'Upload Document',
     },
   },
+  knowledgeOpenAPIDocument: {
+    title: 'Open API Documentation',
+    description:
+      'Read the authentication, upload, progress, preview, and task-control guide for asynchronous knowledge document imports.',
+    download: 'Download Markdown',
+    retry: 'Reload',
+    empty: 'No API documentation available',
+    loadFailed: 'Failed to load the API documentation. Check whether the service is running.',
+  },
   default_login: 'Default Login Method',
   login_method: 'Login Method',
   display_code: 'Account login verification code setting',

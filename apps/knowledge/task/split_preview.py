@@ -256,7 +256,6 @@ def split_document_preview_task(
         )
         if state is None or state.get("status") == "cancelled":
             raise SplitPreviewTaskExpired("Split preview task stopped")
-
     try:
         state = update_split_task_state(
             task_id,
@@ -326,6 +325,19 @@ def split_document_preview_task(
             if generated_file_ids:
                 QuerySet(File).filter(id__in=generated_file_ids).delete()
             raise SplitPreviewTaskExpired("Split preview task stopped")
+        if state.get("open_api") is True:
+            try:
+                cleanup_split_preview_files_task.apply_async(
+                    args=[str(task_id)], countdown=SPLIT_TASK_CACHE_TIMEOUT
+                )
+            except Exception as e:
+                maxkb_logger.error(
+                    f"Failed to schedule Open API import cleanup {task_id}: {e}"
+                )
+        if state.get("open_api") is True and state.get("auto_apply") is True:
+            from knowledge.open_api.document_import_task import apply_import_task
+
+            apply_import_task(task_id)
     except SplitPreviewTaskExpired:
         pass
     except Exception as e:

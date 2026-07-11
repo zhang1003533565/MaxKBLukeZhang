@@ -267,6 +267,26 @@ const systemRouter = {
       component: () => import('@/views/system/open-api/index.vue'),
     },
     {
+      path: '/system/open-api-document',
+      name: 'knowledgeOpenAPIDocument',
+      meta: {
+        icon: 'Document',
+        iconActive: 'Document',
+        title: 'views.system.knowledgeOpenAPIDocument.title',
+        activeMenu: '/system',
+        parentPath: '/system',
+        parentName: 'system',
+        sameRoute: 'knowledgeOpenAPIDocument',
+        permission: [
+          RoleConst.ADMIN,
+          RoleConst.USER.getWorkspaceRole,
+          RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
+          PermissionConst.SYSTEM_API_KEY_EDIT,
+        ],
+      },
+      component: () => import('@/views/system/open-api-document/index.vue'),
+    },
+    {
       path: '/system/shared',
       name: 'shared',
       meta: {
