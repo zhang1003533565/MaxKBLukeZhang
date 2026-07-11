@@ -11,10 +11,35 @@ from knowledge.models import File, FileSourceType
 
 SPLIT_TASK_CACHE_TIMEOUT = 60 * 60 * 2
 SPLIT_TASK_CACHE_PREFIX = "split-preview"
+SPLIT_TASK_CANCELLED_CACHE_PREFIX = "split-preview-cancelled"
+
+
+class SplitPreviewTaskExpired(Exception):
+    pass
 
 
 def get_split_task_cache_key(task_id):
     return f"{SPLIT_TASK_CACHE_PREFIX}:{task_id}"
+
+
+def get_split_task_cancelled_cache_key(task_id):
+    return f"{SPLIT_TASK_CANCELLED_CACHE_PREFIX}:{task_id}"
+
+
+def _as_cancelled_state(state):
+    if state is None:
+        return None
+    cancelled = dict(state)
+    cancelled.update(
+        {
+            "status": "cancelled",
+            "stage": "cancelled",
+            "message": "任务已终止",
+            "result": None,
+            "error": None,
+        }
+    )
+    return cancelled
 
 
 def calculate_split_progress(stage, processed=0, total=0):
@@ -52,7 +77,10 @@ def create_split_task_state(task_id, user_id, workspace_id, knowledge_id):
 
 
 def get_split_task_state(task_id):
-    return cache.get(get_split_task_cache_key(task_id))
+    state = cache.get(get_split_task_cache_key(task_id))
+    if cache.get(get_split_task_cancelled_cache_key(task_id)) is True:
+        return _as_cancelled_state(state)
+    return state
 
 
 def update_split_task_state(task_id, **fields):
@@ -60,6 +88,10 @@ def update_split_task_state(task_id, **fields):
     state = cache.get(cache_key)
     if state is None:
         return None
+    if cache.get(get_split_task_cancelled_cache_key(task_id)) is True:
+        return _as_cancelled_state(state)
+    if state.get("status") == "cancelled" and fields.get("status") != "cancelled":
+        return state
     explicit_progress = fields.pop("progress", None)
     state.update(fields)
     processed = int(state.get("processed") or 0)
@@ -69,6 +101,65 @@ def update_split_task_state(task_id, **fields):
     next_progress = calculated_progress if explicit_progress is None else int(explicit_progress)
     state["progress"] = max(int(state.get("progress") or 0), next_progress)
     cache.set(cache_key, state, timeout=SPLIT_TASK_CACHE_TIMEOUT)
+    return state
+
+
+def cancel_split_task_state(task_id):
+    cache_key = get_split_task_cache_key(task_id)
+    cache.set(
+        get_split_task_cancelled_cache_key(task_id),
+        True,
+        timeout=SPLIT_TASK_CACHE_TIMEOUT,
+    )
+    state = cache.get(cache_key)
+    if state is None:
+        return None
+    state = _as_cancelled_state(state)
+    cache.set(cache_key, state, timeout=SPLIT_TASK_CACHE_TIMEOUT)
+    return state
+
+
+def cleanup_split_preview_files(task_id):
+    QuerySet(File).filter(
+        source_type=FileSourceType.TEMPORARY_120_MINUTE.value,
+        source_id=str(task_id),
+    ).delete()
+    QuerySet(File).filter(meta__split_preview_task_id=str(task_id)).delete()
+
+
+@celery_app.task(name="celery:cleanup_split_preview_files")
+def cleanup_split_preview_files_task(task_id):
+    cleanup_split_preview_files(task_id)
+
+
+def force_cancel_split_preview_task(task_id):
+    state = get_split_task_state(task_id)
+    if state is None:
+        return None
+    if state.get("status") in {"completed", "failed", "cancelled"}:
+        raise ValueError("Split preview task is already finished")
+
+    state = cancel_split_task_state(task_id)
+    celery_task_id = state.get("celery_task_id") if state else None
+    if celery_task_id:
+        try:
+            celery_app.control.revoke(
+                celery_task_id, terminate=True, signal="SIGTERM"
+            )
+        except Exception as e:
+            maxkb_logger.error(f"Failed to revoke split preview task {task_id}: {e}")
+    try:
+        cleanup_split_preview_files(task_id)
+    except Exception as e:
+        maxkb_logger.error(f"Failed to clean split preview task {task_id}: {e}")
+    try:
+        cleanup_split_preview_files_task.apply_async(
+            args=[str(task_id)], countdown=5
+        )
+    except Exception as e:
+        maxkb_logger.error(
+            f"Failed to schedule delayed cleanup for split preview task {task_id}: {e}"
+        )
     return state
 
 
@@ -120,7 +211,7 @@ def split_document_preview_task(
             if stage == "splitting":
                 completed_files = min(completed_files + 1, file_count)
 
-        update_split_task_state(
+        state = update_split_task_state(
             task_id,
             status="processing",
             stage=stage,
@@ -129,9 +220,11 @@ def split_document_preview_task(
             total=stage_occurrences[stage],
             message=message,
         )
+        if state is None or state.get("status") == "cancelled":
+            raise SplitPreviewTaskExpired("Split preview task stopped")
 
     try:
-        update_split_task_state(
+        state = update_split_task_state(
             task_id,
             status="processing",
             stage="parsing",
@@ -139,6 +232,8 @@ def split_document_preview_task(
             total=len(input_file_ids),
             message="正在解析上传文件",
         )
+        if state is None or state.get("status") == "cancelled":
+            raise SplitPreviewTaskExpired("Split preview task stopped")
         file_map = {
             str(file.id): file
             for file in QuerySet(File).filter(
@@ -168,14 +263,18 @@ def split_document_preview_task(
             parse_data["patterns"] = split_config.get("patterns")
         if split_config.get("with_filter") is not None:
             parse_data["with_filter"] = split_config.get("with_filter")
-        preview_result = DocumentSerializers.Split(
+        split_serializer = DocumentSerializers.Split(
             data={
                 "workspace_id": workspace_id,
                 "knowledge_id": knowledge_id,
             },
-            context={"progress_callback": progress_callback},
-        ).parse(parse_data)
-        update_split_task_state(
+            context={
+                "progress_callback": progress_callback,
+                "split_preview_task_id": str(task_id),
+            },
+        )
+        preview_result = split_serializer.parse(parse_data)
+        state = update_split_task_state(
             task_id,
             status="completed",
             stage="completed",
@@ -185,6 +284,15 @@ def split_document_preview_task(
             result=preview_result,
             error=None,
         )
+        if state is None or state.get("status") == "cancelled":
+            generated_file_ids = set(
+                getattr(split_serializer, "_request_source_file_ids", set())
+            ) | set(getattr(split_serializer, "_request_image_ids", set()))
+            if generated_file_ids:
+                QuerySet(File).filter(id__in=generated_file_ids).delete()
+            raise SplitPreviewTaskExpired("Split preview task stopped")
+    except SplitPreviewTaskExpired:
+        pass
     except Exception as e:
         maxkb_logger.error(
             f"Split preview task {task_id} failed: {e}, {traceback.format_exc()}"

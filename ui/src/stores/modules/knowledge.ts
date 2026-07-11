@@ -13,6 +13,7 @@ export type DocumentUploadDraftStatus =
   | 'parsing'
   | 'ready'
   | 'failed'
+  | 'cancelled'
 
 export interface DocumentUploadDraft {
   key: string

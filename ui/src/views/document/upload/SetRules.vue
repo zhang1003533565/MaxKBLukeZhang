@@ -173,6 +173,11 @@
           <el-text type="info" size="small" class="upload-progress__tip">
             {{ progressTip }}
           </el-text>
+          <div v-if="canCancelTask" class="text-right mt-8">
+            <el-button type="danger" plain :loading="cancelLoading" @click="cancelSplitTask">
+              {{ $t('views.document.setRules.progress.cancelButton') }}
+            </el-button>
+          </div>
         </div>
 
         <div v-loading="loading">
@@ -184,6 +189,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import ParagraphPreview from '@/views/knowledge/component/ParagraphPreview.vue'
 import { useRoute } from 'vue-router'
 import { cutFilename } from '@/utils/common'
@@ -216,6 +222,7 @@ const radio = ref('1')
 const loading = ref(false)
 const paragraphList = ref<any[]>([])
 const patternLoading = ref<boolean>(false)
+const cancelLoading = ref(false)
 const llmModelOptions = ref<any>({})
 const visionModelOptions = ref<any>({})
 const checkedConnect = ref<boolean>(false)
@@ -256,7 +263,16 @@ const progressTitle = computed(() => {
   if (status === 'failed') {
     return t('views.document.setRules.progress.failed')
   }
+  if (status === 'cancelled') {
+    return t('views.document.setRules.progress.cancelled')
+  }
   return ''
+})
+const canCancelTask = computed(() => {
+  return Boolean(
+    currentDraft.value?.backendTaskId &&
+      ['queued', 'processing', 'parsing'].includes(currentDraft.value.status),
+  )
 })
 const progressTip = computed(() => {
   if (taskTotal.value > 0) {
@@ -275,6 +291,8 @@ const progressTip = computed(() => {
 const firstChecked = ref(true)
 let pollingTimer: ReturnType<typeof setTimeout> | undefined
 let pollingFailureCount = 0
+let componentActive = true
+let pollingGeneration = 0
 
 const form = reactive<{
   patterns: Array<string>
@@ -390,6 +408,7 @@ function applyDraft(draft: DocumentUploadDraft | null) {
 }
 
 function stopPolling() {
+  pollingGeneration += 1
   if (pollingTimer) {
     clearTimeout(pollingTimer)
     pollingTimer = undefined
@@ -397,11 +416,19 @@ function stopPolling() {
 }
 
 function pollSplitTask(backendTaskId: string, taskId: string) {
+  if (!componentActive) {
+    return
+  }
   stopPolling()
+  const generation = pollingGeneration
   loadSharedApi({ type: 'document', systemType: apiType.value })
     .getSplitDocumentTask(id, backendTaskId)
     .then((res: any) => {
-      if (knowledge.documentUploadDraft?.taskId !== taskId) {
+      if (
+        !componentActive ||
+        generation !== pollingGeneration ||
+        knowledge.documentUploadDraft?.taskId !== taskId
+      ) {
         return
       }
       pollingFailureCount = 0
@@ -431,6 +458,17 @@ function pollSplitTask(backendTaskId: string, taskId: string) {
         })
         return
       }
+      if (task.status === 'cancelled') {
+        loading.value = false
+        paragraphList.value = []
+        knowledge.patchDocumentUploadDraft({
+          status: 'cancelled',
+          stage: 'cancelled',
+          message: task.message || t('views.document.setRules.progress.cancelled'),
+          paragraphList: [],
+        })
+        return
+      }
       knowledge.patchDocumentUploadDraft({
         status: task.status === 'queued' ? 'queued' : 'processing',
         progress: Math.max(knowledge.documentUploadDraft?.progress || 0, task.progress || 0),
@@ -443,7 +481,11 @@ function pollSplitTask(backendTaskId: string, taskId: string) {
       pollingTimer = setTimeout(() => pollSplitTask(backendTaskId, taskId), 1000)
     })
     .catch(() => {
-      if (knowledge.documentUploadDraft?.taskId !== taskId) {
+      if (
+        !componentActive ||
+        generation !== pollingGeneration ||
+        knowledge.documentUploadDraft?.taskId !== taskId
+      ) {
         return
       }
       pollingFailureCount += 1
@@ -457,6 +499,51 @@ function pollSplitTask(backendTaskId: string, taskId: string) {
         message: t('views.document.setRules.progress.expired'),
       })
     })
+}
+
+async function cancelSplitTask() {
+  const backendTaskId = currentDraft.value?.backendTaskId
+  if (!backendTaskId || cancelLoading.value) {
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      t('views.document.setRules.progress.cancelConfirmMessage'),
+      t('views.document.setRules.progress.cancelConfirmTitle'),
+      {
+        type: 'warning',
+        confirmButtonText: t('views.document.setRules.progress.cancelButton'),
+        cancelButtonText: t('views.document.setRules.progress.cancelKeepButton'),
+      },
+    )
+  } catch {
+    return
+  }
+
+  stopPolling()
+  cancelLoading.value = true
+  try {
+    await loadSharedApi({ type: 'document', systemType: apiType.value })
+      .cancelSplitDocumentTask(id, backendTaskId)
+    stopPolling()
+    loading.value = false
+    paragraphList.value = []
+    knowledge.patchDocumentUploadDraft({
+      status: 'cancelled',
+      stage: 'cancelled',
+      message: t('views.document.setRules.progress.cancelled'),
+      paragraphList: [],
+    })
+    ElMessage.success(t('views.document.setRules.progress.cancelSuccess'))
+  } catch {
+    ElMessage.error(t('views.document.setRules.progress.cancelFailed'))
+    const taskId = currentDraft.value?.taskId
+    if (taskId && currentDraft.value?.backendTaskId) {
+      pollSplitTask(currentDraft.value.backendTaskId, taskId)
+    }
+  } finally {
+    cancelLoading.value = false
+  }
 }
 
 function postParagraphList(list: any[]) {
@@ -552,10 +639,10 @@ function splitDocument() {
     if (!total) {
       return
     }
-    const uploadPercent = Math.round((progressEvent.loaded / total) * 5)
+    const uploadPercent = Math.round((progressEvent.loaded / total) * 100)
     patchCurrentDraft({
       status: 'uploading',
-      progress: Math.min(uploadPercent, 5),
+      progress: Math.min(uploadPercent, 100),
     })
   }
 
@@ -570,7 +657,7 @@ function splitDocument() {
       }
       patchCurrentDraft({
         status: 'queued',
-        progress: Math.max(draftProgress.value, 5),
+        progress: 0,
         backendTaskId,
         stage: 'queued',
         message: t('views.document.setRules.progress.queued'),
@@ -585,7 +672,7 @@ function splitDocument() {
         message: t('views.document.setRules.progress.failed'),
       })
     })
-    : documentApi.postSplitDocument(id, fd, loading).then((res: any) => {
+    : documentApi.postSplitDocument(id, fd, onUploadProgress).then((res: any) => {
       const list = postParagraphList(res.data || [])
       paragraphList.value = list
       loading.value = false
@@ -662,6 +749,7 @@ watch(
 )
 
 onMounted(() => {
+  componentActive = true
   if (currentDraft.value) {
     applyDraft(currentDraft.value)
     initModelOptions()
@@ -682,7 +770,10 @@ onMounted(() => {
   }
 })
 
-onBeforeUnmount(() => stopPolling())
+onBeforeUnmount(() => {
+  componentActive = false
+  stopPolling()
+})
 
 defineExpose({
   paragraphList,

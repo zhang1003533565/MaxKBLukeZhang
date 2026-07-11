@@ -498,6 +498,13 @@ const getSplitDocumentTask: (
   return get(`${prefix.value}/${knowledge_id}/document/split/task/${task_id}`)
 }
 
+const cancelSplitDocumentTask: (
+  knowledge_id: string,
+  task_id: string,
+) => Promise<Result<any>> = (knowledge_id, task_id) => {
+  return del(`${prefix.value}/${knowledge_id}/document/split/task/${task_id}`)
+}
+
 /**
  * 分段标识列表
  * @param loading 加载器
@@ -679,6 +686,7 @@ export default {
   postSplitDocument,
   postSplitDocumentTask,
   getSplitDocumentTask,
+  cancelSplitDocumentTask,
   listSplitPattern,
   postTableDocument,
   exportQATemplate,

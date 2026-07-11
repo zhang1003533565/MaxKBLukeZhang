@@ -34,6 +34,7 @@ from common.handle.impl.text.xls_split_handle import XlsSplitHandle
 from common.handle.impl.text.xlsx_split_handle import XlsxSplitHandle
 from common.handle.impl.text.zip_split_handle import ZipSplitHandle
 from common.utils.common import bulk_create_in_batches, get_file_content, parse_image, post
+from common.utils.logger import maxkb_logger
 from common.utils.split_model import flat_map, smart_split_paragraph
 from django.contrib.postgres.fields import JSONField
 from django.core import validators
@@ -1086,6 +1087,7 @@ class DocumentSerializers(serializers.Serializer):
         MODEL_SPLIT_STRATEGIES = [LLM_TEXT_STRATEGY, LLM_VISION_STRATEGY]
         MODEL_BATCH_LIMIT = 12000
         MODEL_IMAGE_LIMIT = 4
+        VISION_BATCH_MAX_ATTEMPTS = 2
 
         workspace_id = serializers.CharField(required=False, label=_("workspace id"), allow_null=True)
         knowledge_id = serializers.UUIDField(required=True, label=_("knowledge id"))
@@ -1156,6 +1158,7 @@ class DocumentSerializers(serializers.Serializer):
                 for file in save_image_list:
                     file_bytes = file.meta.pop("content")
                     file.meta["knowledge_id"] = self.data.get("knowledge_id")
+                    file.meta.update(self._split_preview_file_meta())
                     file.source_type = FileSourceType.KNOWLEDGE
                     file.source_id = self.data.get("knowledge_id")
                     file.save(file_bytes)
@@ -1191,6 +1194,10 @@ class DocumentSerializers(serializers.Serializer):
             callback = self.context.get("progress_callback")
             if callback is not None:
                 callback(stage, processed, total, message)
+
+        def _split_preview_file_meta(self):
+            task_id = self.context.get("split_preview_task_id")
+            return {"split_preview_task_id": str(task_id)} if task_id else {}
 
         @classmethod
         def _validate_model_selection(
@@ -1364,6 +1371,11 @@ class DocumentSerializers(serializers.Serializer):
                 count=1,
             )
 
+        @staticmethod
+        def _replace_image_reference_with_alias(content, file_id, alias):
+            pattern = rf"!\[[^]]*\]\(\./oss/(?:image|file)/{re.escape(str(file_id))}\)"
+            return re.sub(pattern, f"[候选图片：{alias}]", content)
+
         def _vision_prompt(self, document_name, title, content, image_ids, page_number=None):
             return (
                 "你是文档图片筛选器。请结合文档名、当前页标题和文字，逐一判断候选图片是否包含可检索的知识信息。\n"
@@ -1468,21 +1480,91 @@ class DocumentSerializers(serializers.Serializer):
                 for start in range(0, len(candidates), self.MODEL_IMAGE_LIMIT):
                     batch = candidates[start : start + self.MODEL_IMAGE_LIMIT]
                     batch_ids = [file_id for file_id, _ in batch]
+                    alias_to_file_id = {
+                        f"img_{index + 1}": file_id
+                        for index, file_id in enumerate(batch_ids)
+                    }
+                    alias_batch = [
+                        (alias, image_bytes)
+                        for alias, (_, image_bytes) in zip(alias_to_file_id, batch)
+                    ]
+                    prompt_content = content
+                    file_id_to_alias = {
+                        file_id: alias for alias, file_id in alias_to_file_id.items()
+                    }
+                    for content_file_id in image_ids:
+                        alias = file_id_to_alias.get(content_file_id)
+                        if alias:
+                            prompt_content = self._replace_image_reference_with_alias(
+                                prompt_content, content_file_id, alias
+                            )
+                        else:
+                            prompt_content = self._remove_image_reference(
+                                prompt_content, content_file_id
+                            )
                     prompt = self._vision_prompt(
                         document_name,
                         str(item.get("title") or ""),
-                        content,
-                        batch_ids,
+                        prompt_content,
+                        list(alias_to_file_id),
                         item.get("page_number"),
                     )
-                    try:
-                        response = vision_model.invoke([self._vision_message(prompt, batch)])
-                    except AppApiException:
-                        raise
-                    except Exception as e:
-                        raise AppApiException(500, str(e)) from e
-                    payload = self._loads_json_payload(self._response_content(response))
-                    decisions.update(self._normalize_vision_images(payload, batch_ids))
+                    normalized = None
+                    last_error = None
+                    returned_ids = []
+                    for _attempt in range(self.VISION_BATCH_MAX_ATTEMPTS):
+                        try:
+                            response = vision_model.invoke(
+                                [self._vision_message(prompt, alias_batch)]
+                            )
+                        except AppApiException:
+                            raise
+                        except Exception as e:
+                            raise AppApiException(500, str(e)) from e
+                        response_content = self._response_content(response)
+                        try:
+                            payload = self._loads_json_payload(response_content)
+                            images = payload.get("images") if isinstance(payload, dict) else []
+                            returned_ids = [
+                                str(image.get("id") or "")
+                                for image in images
+                                if isinstance(image, dict)
+                            ]
+                            normalized = self._normalize_vision_images(
+                                payload, list(alias_to_file_id)
+                            )
+                            break
+                        except AppApiException as e:
+                            last_error = e
+
+                    if normalized is None:
+                        expected_aliases = set(alias_to_file_id)
+                        unknown_count = sum(
+                            returned_id not in expected_aliases for returned_id in returned_ids
+                        )
+                        maxkb_logger.warning(
+                            "Vision batch response is invalid after retry; "
+                            f"keeping original images. error={last_error}, "
+                            f"expected_count={len(expected_aliases)}, "
+                            f"returned_count={len(returned_ids)}, unknown_count={unknown_count}"
+                        )
+                        decisions.update(
+                            {
+                                file_id: {
+                                    "keep": True,
+                                    "description": "视觉模型未能识别，已保留原始插图",
+                                    "reason": "vision_model_invalid_response",
+                                }
+                                for file_id in batch_ids
+                            }
+                        )
+                    else:
+                        decisions.update(
+                            {
+                                alias_to_file_id[alias]: decision
+                                for alias, decision in normalized.items()
+                            }
+                        )
                     completed_vision_batches += 1
                     self._report_progress(
                         "vision",
@@ -1494,8 +1576,11 @@ class DocumentSerializers(serializers.Serializer):
                 for file_id in image_ids:
                     decision = decisions[file_id]
                     if decision["keep"]:
-                        content = self._replace_image_reference(content, file_id, decision["description"])
-                        kept_descriptions[file_id] = decision["description"]
+                        if decision["description"]:
+                            content = self._replace_image_reference(
+                                content, file_id, decision["description"]
+                            )
+                            kept_descriptions[file_id] = decision["description"]
                     else:
                         content = self._remove_image_reference(content, file_id)
                         rejected_ids.add(file_id)
@@ -1705,6 +1790,7 @@ class DocumentSerializers(serializers.Serializer):
                 file_size=file.size,
                 source_type=FileSourceType.KNOWLEDGE,
                 source_id=self.data.get("knowledge_id"),
+                meta=self._split_preview_file_meta(),
             )
             raw_file.save(file.read())
             if hasattr(self, "_request_source_file_ids"):

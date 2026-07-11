@@ -37,6 +37,40 @@ class DocumentVisionSplitTest(SimpleTestCase):
         self.assertFalse(self.serializer._is_meaningful_image_candidate(image_bytes(color="white")))
         self.assertTrue(self.serializer._is_meaningful_image_candidate(image_bytes(pattern=True)))
 
+    def test_split_preview_file_meta_is_only_added_for_async_task_context(self):
+        async_serializer = DocumentSerializers.Split(
+            data={}, context={"split_preview_task_id": "task-1"}
+        )
+
+        self.assertEqual(
+            async_serializer._split_preview_file_meta(),
+            {"split_preview_task_id": "task-1"},
+        )
+        self.assertEqual(self.serializer._split_preview_file_meta(), {})
+
+    @patch("knowledge.serializers.document.QuerySet")
+    def test_split_save_image_marks_async_preview_file_for_cleanup(self, query_set):
+        serializer = DocumentSerializers.Split(
+            context={"split_preview_task_id": "task-1"}
+        )
+        serializer._data = {"knowledge_id": "knowledge-1"}
+        serializer._request_image_ids = set()
+        query_set.return_value.filter.return_value.values.return_value = []
+        image_file = SimpleNamespace(
+            id="image-1",
+            meta={"content": b"image"},
+            source_type=None,
+            source_id=None,
+            save=Mock(),
+        )
+
+        serializer.save_image([image_file])
+
+        self.assertEqual(image_file.meta["split_preview_task_id"], "task-1")
+        self.assertEqual(image_file.meta["knowledge_id"], "knowledge-1")
+        image_file.save.assert_called_once_with(b"image")
+        self.assertEqual(serializer._request_image_ids, {"image-1"})
+
     def test_vision_split_requires_both_models_and_text_split_keeps_legacy_model(self):
         with self.assertRaises(AppApiException):
             self.serializer._validate_model_selection("llm_vision", vision_model_id="vision")
@@ -136,12 +170,12 @@ class DocumentVisionSplitTest(SimpleTestCase):
                     {
                         "images": [
                             {
-                                "id": file_id,
+                                "id": f"img_{index + 1}",
                                 "keep": True,
                                 "description": f"说明 {index}",
                                 "reason": "知识插图",
                             }
-                            for index, file_id in enumerate(image_ids[:4])
+                            for index in range(4)
                         ]
                     }
                 )
@@ -151,7 +185,7 @@ class DocumentVisionSplitTest(SimpleTestCase):
                     {
                         "images": [
                             {
-                                "id": image_ids[4],
+                                "id": "img_1",
                                 "keep": False,
                                 "description": "",
                                 "reason": "背景",
@@ -175,6 +209,119 @@ class DocumentVisionSplitTest(SimpleTestCase):
         self.assertEqual(descriptions[image_ids[0]], "说明 0")
         self.assertIn(("filtering", 5, 5), [event[:3] for event in progress_events])
         self.assertIn(("vision", 2, 2), [event[:3] for event in progress_events])
+
+        first_request = vision_model.invoke.call_args_list[0].args[0][0]
+        request_text = "\n".join(
+            item.get("text", "")
+            for item in first_request.content
+            if item.get("type") == "text"
+        )
+        self.assertIn("候选图片ID：img_1, img_2, img_3, img_4", request_text)
+        self.assertNotIn(image_ids[0], request_text)
+
+    @patch("knowledge.serializers.document.QuerySet")
+    def test_vision_enrichment_retries_invalid_ids_then_uses_valid_result(self, query_set):
+        file_id = "11111111-1111-1111-1111-111111111111"
+        self.serializer._request_image_ids = {file_id}
+        query_set.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            get_bytes=lambda: image_bytes(pattern=True),
+            sha256_hash="hash-1",
+        )
+        vision_model = Mock()
+        vision_model.invoke.side_effect = [
+            SimpleNamespace(
+                content=json.dumps(
+                    {"images": [{"id": "wrong-id", "keep": False, "description": ""}]}
+                )
+            ),
+            SimpleNamespace(
+                content=json.dumps(
+                    {
+                        "images": [
+                            {
+                                "id": "img_1",
+                                "keep": True,
+                                "description": "有效图片说明",
+                                "reason": "知识插图",
+                            }
+                        ]
+                    }
+                )
+            ),
+        ]
+
+        enriched, rejected_ids, descriptions = self.serializer._enrich_paragraphs_with_vision(
+            "chapter.pdf",
+            [{"title": "标题", "content": f"![image](./oss/file/{file_id})"}],
+            vision_model,
+        )
+
+        self.assertEqual(vision_model.invoke.call_count, 2)
+        self.assertIn("图片说明：有效图片说明", enriched[0]["content"])
+        self.assertEqual(rejected_ids, set())
+        self.assertEqual(descriptions[file_id], "有效图片说明")
+
+    @patch("knowledge.serializers.document.QuerySet")
+    def test_vision_enrichment_keeps_original_image_when_retry_still_invalid(self, query_set):
+        file_id = "11111111-1111-1111-1111-111111111111"
+        image_reference = f"![image](./oss/file/{file_id})"
+        self.serializer._request_image_ids = {file_id}
+        query_set.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            get_bytes=lambda: image_bytes(pattern=True),
+            sha256_hash="hash-1",
+        )
+        vision_model = Mock()
+        vision_model.invoke.return_value = SimpleNamespace(
+            content=json.dumps(
+                {"images": [{"id": "wrong-id", "keep": False, "description": ""}]}
+            )
+        )
+
+        enriched, rejected_ids, descriptions = self.serializer._enrich_paragraphs_with_vision(
+            "chapter.pdf",
+            [{"title": "标题", "content": image_reference}],
+            vision_model,
+        )
+
+        self.assertEqual(vision_model.invoke.call_count, 2)
+        self.assertIn(image_reference, enriched[0]["content"])
+        self.assertIn("图片说明：视觉模型未能识别，已保留原始插图", enriched[0]["content"])
+        self.assertEqual(rejected_ids, set())
+        self.assertEqual(descriptions[file_id], "视觉模型未能识别，已保留原始插图")
+
+    @patch("knowledge.serializers.document.QuerySet")
+    def test_vision_split_keeps_image_only_page_when_vision_response_stays_invalid(
+        self, query_set
+    ):
+        file_id = "11111111-1111-1111-1111-111111111111"
+        image_reference = f"![image](./oss/file/{file_id})"
+        self.serializer._request_image_ids = {file_id}
+        query_set.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            get_bytes=lambda: image_bytes(pattern=True),
+            sha256_hash="hash-1",
+        )
+        vision_model = Mock()
+        vision_model.invoke.return_value = SimpleNamespace(content="not-json")
+        llm_model = Mock()
+
+        def echo_split_content(messages):
+            prompt = messages[0].content
+            content = prompt.split("待切分内容：\n", 1)[1]
+            return SimpleNamespace(
+                content=json.dumps({"paragraphs": [{"title": "", "content": content}]})
+            )
+
+        llm_model.invoke.side_effect = echo_split_content
+        self.serializer._get_model = Mock(side_effect=[vision_model, llm_model])
+
+        result, rejected_ids = self.serializer._split_vision_content(
+            "chapter.pdf", [{"title": "", "content": image_reference}], "vision", "llm", 500
+        )
+
+        self.assertEqual(vision_model.invoke.call_count, 2)
+        self.assertIn(image_reference, result[0]["content"])
+        self.assertIn("图片说明：视觉模型未能识别，已保留原始插图", result[0]["content"])
+        self.assertEqual(rejected_ids, set())
 
     @patch("knowledge.serializers.document.QuerySet")
     def test_vision_enrichment_rejects_image_ids_not_created_by_upload(self, query_set):

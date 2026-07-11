@@ -42,6 +42,7 @@ from knowledge.serializers.document import DocumentSerializers
 from knowledge.models import File, FileSourceType
 from knowledge.task.split_preview import (
     create_split_task_state,
+    force_cancel_split_preview_task,
     get_split_task_state,
     split_document_preview_task,
     update_split_task_state,
@@ -325,7 +326,7 @@ class DocumentView(APIView):
                     for key, value in split_data.items()
                     if key != "file" and value is not None
                 }
-                split_document_preview_task.delay(
+                async_result = split_document_preview_task.delay(
                     task_id,
                     str(request.user.id),
                     workspace_id,
@@ -333,6 +334,7 @@ class DocumentView(APIView):
                     input_file_ids,
                     split_config,
                 )
+                update_split_task_state(task_id, celery_task_id=async_result.id)
             except Exception as e:
                 if input_file_ids:
                     File.objects.filter(id__in=input_file_ids).delete()
@@ -374,6 +376,40 @@ class DocumentView(APIView):
             ):
                 raise AppApiException(404, _("Split preview task expired or does not exist"))
             return result.success(state)
+
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_DOCUMENT_READ.get_workspace_knowledge_permission(),
+            PermissionConstants.KNOWLEDGE_DOCUMENT_READ.get_workspace_permission_workspace_manage_role(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            ViewPermission(
+                [RoleConstants.USER.get_workspace_role()],
+                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                CompareConstants.AND,
+            ),
+        )
+        def delete(
+            self,
+            request: Request,
+            workspace_id: str,
+            knowledge_id: str,
+            task_id: str,
+        ):
+            state = get_split_task_state(task_id)
+            if state is None or (
+                state.get("user_id") != str(request.user.id)
+                or state.get("workspace_id") != str(workspace_id)
+                or state.get("knowledge_id") != str(knowledge_id)
+            ):
+                raise AppApiException(404, _("Split preview task expired or does not exist"))
+            if state.get("status") in {"completed", "failed", "cancelled"}:
+                raise AppApiException(409, _("Split preview task is already finished"))
+            try:
+                cancelled_state = force_cancel_split_preview_task(task_id)
+            except ValueError as e:
+                raise AppApiException(409, str(e)) from e
+            return result.success(
+                {"task_id": task_id, "status": cancelled_state.get("status")}
+            )
 
     class SplitPattern(APIView):
         authentication_classes = [TokenAuth]
