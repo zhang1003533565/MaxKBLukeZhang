@@ -4,7 +4,15 @@ import type { UploadUserFile } from 'element-plus'
 import { type Ref } from 'vue'
 import knowledgeApi from '@/api/knowledge/knowledge'
 
-export type DocumentUploadDraftStatus = 'uploading' | 'parsing' | 'ready' | 'failed'
+const DOCUMENT_UPLOAD_DRAFT_KEY = 'maxkb-document-upload-draft'
+
+export type DocumentUploadDraftStatus =
+  | 'uploading'
+  | 'queued'
+  | 'processing'
+  | 'parsing'
+  | 'ready'
+  | 'failed'
 
 export interface DocumentUploadDraft {
   key: string
@@ -18,6 +26,11 @@ export interface DocumentUploadDraft {
   checkedConnect: boolean
   radio: string
   startedByUser?: boolean
+  backendTaskId?: string
+  stage?: string
+  processed?: number
+  total?: number
+  remaining?: number
   form: {
     patterns: string[]
     limit: number
@@ -38,13 +51,37 @@ export interface knowledgeStateTypes {
   documentUploadDraft: DocumentUploadDraft | null
 }
 
+function loadDocumentUploadDraft(): DocumentUploadDraft | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  try {
+    const value = window.sessionStorage.getItem(DOCUMENT_UPLOAD_DRAFT_KEY)
+    return value ? JSON.parse(value) : null
+  } catch {
+    return null
+  }
+}
+
+function saveDocumentUploadDraft(draft: DocumentUploadDraft | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  if (!draft) {
+    window.sessionStorage.removeItem(DOCUMENT_UPLOAD_DRAFT_KEY)
+    return
+  }
+  const { promise: _promise, ...persistedDraft } = draft
+  window.sessionStorage.setItem(DOCUMENT_UPLOAD_DRAFT_KEY, JSON.stringify(persistedDraft))
+}
+
 const useKnowledgeStore = defineStore('knowledge', {
   state: (): knowledgeStateTypes => ({
     baseInfo: null,
     documentsType: '',
     documentsFiles: [],
     knowledgeList: [],
-    documentUploadDraft: null,
+    documentUploadDraft: loadDocumentUploadDraft(),
   }),
   actions: {
     saveBaseInfo(info: knowledgeData | null) {
@@ -61,6 +98,7 @@ const useKnowledgeStore = defineStore('knowledge', {
     },
     setDocumentUploadDraft(draft: DocumentUploadDraft) {
       this.documentUploadDraft = draft
+      saveDocumentUploadDraft(draft)
     },
     patchDocumentUploadDraft(draft: Partial<DocumentUploadDraft>) {
       if (!this.documentUploadDraft) {
@@ -71,9 +109,11 @@ const useKnowledgeStore = defineStore('knowledge', {
         ...draft,
         updatedAt: Date.now(),
       }
+      saveDocumentUploadDraft(this.documentUploadDraft)
     },
     clearDocumentUploadDraft() {
       this.documentUploadDraft = null
+      saveDocumentUploadDraft(null)
     },
   },
 })

@@ -88,10 +88,12 @@ export default {
     },
     llmVision: {
       label: 'LLM Vision Segmentation',
-      text: 'Use a vision-capable model to split with both document images and text.',
+      text: 'Use a vision model to filter and understand useful images, then a text LLM to split by semantics.',
     },
     model: {
       label: 'Segmentation Model',
+      llmLabel: 'Text Segmentation Model',
+      visionLabel: 'Vision Understanding Model',
       llmPlaceholder: 'Select a text LLM',
       visionPlaceholder: 'Select a vision model',
     },
@@ -113,9 +115,14 @@ export default {
     },
     progress: {
       uploading: 'Uploading document',
+      queued: 'Task submitted and waiting',
+      processing: 'Processing document',
       parsing: 'Upload complete, parsing segments',
       ready: 'Draft ready',
       failed: 'Processing failed. Please generate the preview again.',
+      expired: 'The task expired or cannot be accessed. Generate the preview again.',
+      uploadInterrupted: 'The page refresh interrupted the upload. Generate the preview again.',
+      counts: 'Processed {processed} / {total} batches · {remaining} remaining',
       files: 'Files: ',
       draft: 'The current upload draft is preserved.',
     },

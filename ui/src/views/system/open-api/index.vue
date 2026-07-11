@@ -184,10 +184,22 @@
             </el-select>
           </el-form-item>
           <el-form-item
-            v-if="testType === 'upload' && isModelSplitStrategy(form.splitStrategy)"
+            v-if="testType === 'upload' && form.splitStrategy === 'llm_text'"
             :label="$t('views.system.knowledgeOpenAPI.modelId')"
           >
             <el-input v-model="form.modelId" clearable />
+          </el-form-item>
+          <el-form-item
+            v-if="testType === 'upload' && form.splitStrategy === 'llm_vision'"
+            :label="$t('views.system.knowledgeOpenAPI.visionModelId')"
+          >
+            <el-input v-model="form.visionModelId" clearable />
+          </el-form-item>
+          <el-form-item
+            v-if="testType === 'upload' && form.splitStrategy === 'llm_vision'"
+            :label="$t('views.system.knowledgeOpenAPI.llmModelId')"
+          >
+            <el-input v-model="form.llmModelId" clearable />
           </el-form-item>
         </el-form>
         <el-button class="w-full" type="primary" @click="testAPI" :loading="testLoading">
@@ -242,6 +254,8 @@ const form = reactive({
   queryText: '',
   splitStrategy: '' as SplitStrategy,
   modelId: '',
+  visionModelId: '',
+  llmModelId: '',
 })
 
 const workspaceId = computed(() => user.getWorkspaceId() || 'default')
@@ -282,7 +296,8 @@ const endpoints = computed<EndpointItem[]>(() => [
     example: `curl -X POST -H "Authorization: Bearer ${selectedKey.value || '<api_key>'}" \\
   -F "file=@demo.docx" \\
   -F "split_strategy=llm_vision" \\
-  -F "model_id=<vision_model_id>" \\
+  -F "vision_model_id=<vision_model_id>" \\
+  -F "llm_model_id=<llm_model_id>" \\
   "${baseUrl.value}/knowledges/{knowledge_id}/documents/upload"`,
   },
   {
@@ -321,10 +336,6 @@ function getMethodTagType(method: EndpointMethod): TagProps['type'] {
 function selectEndpoint(value: TestType) {
   testType.value = value
   testResult.value = ''
-}
-
-function isModelSplitStrategy(strategy: string) {
-  return ['llm_text', 'llm_vision'].includes(strategy)
 }
 
 function syncSelectedKey() {
@@ -404,8 +415,16 @@ function testAPI() {
     MsgError(t('views.system.knowledgeOpenAPI.selectFile'))
     return
   }
-  if (testType.value === 'upload' && isModelSplitStrategy(form.splitStrategy) && !form.modelId) {
+  if (testType.value === 'upload' && form.splitStrategy === 'llm_text' && !form.modelId) {
     MsgError(t('views.system.knowledgeOpenAPI.modelIdRequired'))
+    return
+  }
+  if (
+    testType.value === 'upload' &&
+    form.splitStrategy === 'llm_vision' &&
+    (!form.visionModelId || !form.llmModelId)
+  ) {
+    MsgError(t('views.system.knowledgeOpenAPI.visionModelsRequired'))
     return
   }
   testLoading.value = true
@@ -446,8 +465,12 @@ function uploadTest(url: string) {
   if (form.splitStrategy) {
     formData.append('split_strategy', form.splitStrategy)
   }
-  if (isModelSplitStrategy(form.splitStrategy) && form.modelId) {
+  if (form.splitStrategy === 'llm_text' && form.modelId) {
     formData.append('model_id', form.modelId)
+  }
+  if (form.splitStrategy === 'llm_vision') {
+    formData.append('vision_model_id', form.visionModelId)
+    formData.append('llm_model_id', form.llmModelId)
   }
   return OpenAPI.uploadDocument(url, selectedKey.value, formData)
 }

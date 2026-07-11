@@ -81,7 +81,7 @@ class KnowledgeOpenAPIDocsView(APIView):
                         "description": (
                             "上传文件、自动分段、创建文档并进入向量化队列。"
                             "可选 split_strategy=llm_text 或 llm_vision；"
-                            "使用大模型分段时需传 model_id。"
+                            "llm_text 需传 model_id，llm_vision 需传 vision_model_id 和 llm_model_id。"
                         ),
                         "form_data": [
                             {"name": "file", "type": "file", "required": True},
@@ -95,6 +95,8 @@ class KnowledgeOpenAPIDocsView(APIView):
                                 "enum": ["llm_text", "llm_vision"],
                             },
                             {"name": "model_id", "type": "uuid", "required": False},
+                            {"name": "vision_model_id", "type": "uuid", "required": False},
+                            {"name": "llm_model_id", "type": "uuid", "required": False},
                         ],
                     },
                     {
@@ -182,6 +184,8 @@ class KnowledgeOpenAPIUploadDocumentView(APIView):
             "with_filter": _to_bool(request.data.get("with_filter")),
             "split_strategy": request.data.get("split_strategy") or "",
             "model_id": request.data.get("model_id") or None,
+            "vision_model_id": request.data.get("vision_model_id") or None,
+            "llm_model_id": request.data.get("llm_model_id") or None,
         }
         document_list = DocumentSerializers.Split(
             data={"workspace_id": workspace_id, "knowledge_id": knowledge_id}

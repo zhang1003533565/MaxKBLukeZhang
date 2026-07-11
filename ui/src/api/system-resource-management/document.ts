@@ -450,6 +450,28 @@ const postSplitDocument: (
   )
 }
 
+const postSplitDocumentTask: (
+  knowledge_id: string,
+  data: any,
+  onUploadProgress?: UploadProgressHandler,
+) => Promise<Result<any>> = (knowledge_id, data, onUploadProgress) => {
+  return post(
+    `${prefix}/${knowledge_id}/document/split/task`,
+    data,
+    undefined,
+    undefined,
+    1000 * 60 * 60,
+    onUploadProgress,
+  )
+}
+
+const getSplitDocumentTask: (
+  knowledge_id: string,
+  task_id: string,
+) => Promise<Result<any>> = (knowledge_id, task_id) => {
+  return get(`${prefix}/${knowledge_id}/document/split/task/${task_id}`)
+}
+
 /**
  * 分段标识列表
  * @param loading 加载器
@@ -618,6 +640,8 @@ export default {
   putMigrateMulDocument,
   postQADocument,
   postSplitDocument,
+  postSplitDocumentTask,
+  getSplitDocumentTask,
   listSplitPattern,
   postTableDocument,
   exportQATemplate,

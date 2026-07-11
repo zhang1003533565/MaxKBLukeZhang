@@ -3,7 +3,7 @@ import io
 import json
 import os
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from functools import reduce
 from imghdr import what
 from tempfile import TemporaryDirectory
@@ -12,6 +12,7 @@ from typing import Dict, List
 import openpyxl
 import uuid_utils.compat as uuid
 from celery_once import AlreadyQueued
+from PIL import Image, ImageStat
 from common.db.search import get_dynamics_model, native_page_search, native_search
 from common.event.listener_manage import ListenerManagement
 from common.exception.app_exception import AppApiException
@@ -201,6 +202,8 @@ class DocumentSplitRequest(serializers.Serializer):
     with_filter = serializers.BooleanField(required=False, label=_("Auto Clean"))
     split_strategy = serializers.CharField(required=False, allow_blank=True, label=_("split strategy"))
     model_id = serializers.UUIDField(required=False, allow_null=True, label=_("model id"))
+    vision_model_id = serializers.UUIDField(required=False, allow_null=True, label=_("vision model id"))
+    llm_model_id = serializers.UUIDField(required=False, allow_null=True, label=_("LLM model id"))
 
 
 class DocumentInstanceQASerializer(serializers.Serializer):
@@ -1082,7 +1085,7 @@ class DocumentSerializers(serializers.Serializer):
         LLM_VISION_STRATEGY = "llm_vision"
         MODEL_SPLIT_STRATEGIES = [LLM_TEXT_STRATEGY, LLM_VISION_STRATEGY]
         MODEL_BATCH_LIMIT = 12000
-        MODEL_IMAGE_LIMIT = 8
+        MODEL_IMAGE_LIMIT = 4
 
         workspace_id = serializers.CharField(required=False, label=_("workspace id"), allow_null=True)
         knowledge_id = serializers.UUIDField(required=True, label=_("knowledge id"))
@@ -1107,28 +1110,40 @@ class DocumentSerializers(serializers.Serializer):
         def parse(self, instance):
             self.is_valid(instance=instance, raise_exception=True)
             DocumentSplitRequest(data=instance).is_valid(raise_exception=True)
+            self._request_image_ids = set()
+            self._request_source_file_ids = set()
 
             file_list = instance.get("file")
             split_strategy = instance.get("split_strategy") or ""
             model_id = instance.get("model_id")
-            if split_strategy in self.MODEL_SPLIT_STRATEGIES and not model_id:
-                raise AppApiException(500, _("Model is not allowed to be empty"))
-
-            return reduce(
-                lambda x, y: [*x, *y],
-                [
-                    self.file_to_paragraph(
-                        f,
-                        instance.get("patterns", None),
-                        instance.get("with_filter", None),
-                        instance.get("limit", 4096),
-                        split_strategy,
-                        model_id,
-                    )
-                    for f in file_list
-                ],
-                [],
+            vision_model_id = instance.get("vision_model_id")
+            llm_model_id = instance.get("llm_model_id")
+            self._validate_model_selection(
+                split_strategy, model_id, vision_model_id, llm_model_id
             )
+
+            result_list = []
+            try:
+                for file in file_list:
+                    result_list.extend(
+                        self.file_to_paragraph(
+                            file,
+                            instance.get("patterns", None),
+                            instance.get("with_filter", None),
+                            instance.get("limit", 4096),
+                            split_strategy,
+                            model_id,
+                            vision_model_id,
+                            llm_model_id,
+                        )
+                    )
+                return result_list
+            except Exception:
+                if self._request_image_ids:
+                    QuerySet(File).filter(id__in=self._request_image_ids).delete()
+                if self._request_source_file_ids:
+                    QuerySet(File).filter(id__in=self._request_source_file_ids).delete()
+                raise
 
         def save_image(self, image_list):
             if image_list is not None and len(image_list) > 0:
@@ -1144,6 +1159,8 @@ class DocumentSerializers(serializers.Serializer):
                     file.source_type = FileSourceType.KNOWLEDGE
                     file.source_id = self.data.get("knowledge_id")
                     file.save(file_bytes)
+                    if hasattr(self, "_request_image_ids"):
+                        self._request_image_ids.add(str(file.id))
 
         @staticmethod
         def _response_content(response):
@@ -1170,6 +1187,66 @@ class DocumentSerializers(serializers.Serializer):
                 return 100000
             return limit
 
+        def _report_progress(self, stage, processed=0, total=0, message=""):
+            callback = self.context.get("progress_callback")
+            if callback is not None:
+                callback(stage, processed, total, message)
+
+        @classmethod
+        def _validate_model_selection(
+            cls, split_strategy, model_id=None, vision_model_id=None, llm_model_id=None
+        ):
+            if split_strategy == cls.LLM_TEXT_STRATEGY and not model_id:
+                raise AppApiException(500, _("Model is not allowed to be empty"))
+            if split_strategy == cls.LLM_VISION_STRATEGY and (
+                not vision_model_id or not llm_model_id
+            ):
+                raise AppApiException(500, _("Vision model and LLM model are required"))
+
+        @staticmethod
+        def _is_meaningful_image_candidate(image_bytes):
+            try:
+                with Image.open(io.BytesIO(image_bytes)) as image:
+                    image.load()
+                    width, height = image.size
+                    if width < 16 or height < 16 or width * height < 1024:
+                        return False
+                    ratio = width / height
+                    if ratio > 30 or ratio < 1 / 30:
+                        return False
+                    if "A" in image.getbands() and image.getchannel("A").getextrema() == (0, 0):
+                        return False
+                    grayscale = image.convert("L")
+                    return ImageStat.Stat(grayscale).stddev[0] >= 2
+            except Exception:
+                return False
+
+        @staticmethod
+        def _normalize_vision_images(payload, expected_ids):
+            images = payload.get("images") if isinstance(payload, dict) else None
+            if not isinstance(images, list):
+                raise AppApiException(500, _("Vision model result is not valid JSON"))
+            expected_ids = [str(file_id) for file_id in expected_ids]
+            result = {}
+            for item in images:
+                if not isinstance(item, dict):
+                    raise AppApiException(500, _("Vision model result is not valid JSON"))
+                file_id = str(item.get("id") or "")
+                if not file_id or file_id in result or file_id not in expected_ids:
+                    raise AppApiException(500, _("Vision model returned invalid image ids"))
+                keep = item.get("keep") is True
+                description = str(item.get("description") or "").strip()
+                if keep and not description:
+                    raise AppApiException(500, _("Kept images must include a description"))
+                result[file_id] = {
+                    "keep": keep,
+                    "description": description,
+                    "reason": str(item.get("reason") or "").strip(),
+                }
+            if set(result) != set(expected_ids):
+                raise AppApiException(500, _("Vision model did not return all image ids"))
+            return result
+
         @staticmethod
         def _loads_json_payload(text):
             text = text.strip()
@@ -1191,16 +1268,11 @@ class DocumentSerializers(serializers.Serializer):
                     pass
             raise AppApiException(500, _("Model split result is not valid JSON"))
 
-        def _get_model(self, model_id, split_strategy):
+        def _get_model(self, model_id, expected_type):
             workspace_id = self.data.get("workspace_id")
-            expected_type = (
-                ModelTypeConst.IMAGE.name
-                if split_strategy == self.LLM_VISION_STRATEGY
-                else ModelTypeConst.LLM.name
-            )
             model = get_model_by_id(str(model_id), workspace_id)
             if model.model_type != expected_type:
-                if split_strategy == self.LLM_VISION_STRATEGY:
+                if expected_type == ModelTypeConst.IMAGE.name:
                     raise AppApiException(500, _("Please select a vision model"))
                 raise AppApiException(500, _("Please select an LLM model"))
             return get_model_instance_by_model_workspace_id(str(model_id), workspace_id)
@@ -1217,12 +1289,17 @@ class DocumentSerializers(serializers.Serializer):
             return [block for block in blocks if block.strip()]
 
         @staticmethod
-        def _image_file_ids(content):
+        def _all_image_file_ids(content):
             image_ids = []
             for image_ref in parse_image(content):
                 match = re.search(r"\./oss/(?:image|file)/([0-9a-fA-F-]+)", image_ref)
                 if match:
                     image_ids.append(match.group(1))
+            return image_ids
+
+        @staticmethod
+        def _image_file_ids(content):
+            image_ids = DocumentSerializers.Split._all_image_file_ids(content)
             return list(dict.fromkeys(image_ids))
 
         def _batch_blocks(self, blocks, split_strategy):
@@ -1272,9 +1349,166 @@ class DocumentSerializers(serializers.Serializer):
                 )
             return image_messages
 
+        @staticmethod
+        def _remove_image_reference(content, file_id):
+            pattern = rf"!\[[^]]*\]\(\./oss/(?:image|file)/{re.escape(str(file_id))}\)"
+            return re.sub(pattern, "", content)
+
+        @staticmethod
+        def _replace_image_reference(content, file_id, description):
+            pattern = rf"(!\[[^]]*\]\(\./oss/(?:image|file)/{re.escape(str(file_id))}\))"
+            return re.sub(
+                pattern,
+                lambda match: f"图片说明：{description}\n\n{match.group(1)}",
+                content,
+                count=1,
+            )
+
+        def _vision_prompt(self, document_name, title, content, image_ids, page_number=None):
+            return (
+                "你是文档图片筛选器。请结合文档名、当前页标题和文字，逐一判断候选图片是否包含可检索的知识信息。\n"
+                "保留知识插图、流程图、表格、代码截图、操作截图和示意图；丢弃背景、装饰、水印、遮罩、纯色块、"
+                "页眉页脚图案、重复图和没有知识信息的图片。\n"
+                "只输出 JSON，必须覆盖每个候选图片 ID 且每个 ID 只出现一次。\n"
+                '格式：{"images":[{"id":"候选ID","keep":true,"description":"图片知识说明","reason":"原因"}]}\n'
+                "keep=true 时 description 必须具体且可用于文本检索；keep=false 时 description 可以为空。\n"
+                f"文档名：{document_name}\n页码：{page_number or '未知'}\n标题：{title}\n"
+                f"候选图片ID：{', '.join(image_ids)}\n页面文字：\n{content}"
+            )
+
+        def _vision_message(self, prompt, image_items):
+            message_content = [{"type": "text", "text": prompt}]
+            for file_id, image_bytes in image_items:
+                image_format = what(None, image_bytes) or "png"
+                encoded = base64.b64encode(image_bytes).decode("utf-8")
+                message_content.extend(
+                    [
+                        {"type": "text", "text": f"候选图片ID：{file_id}"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/{image_format};base64,{encoded}"},
+                        },
+                    ]
+                )
+            return HumanMessage(content=message_content)
+
+        def _enrich_paragraphs_with_vision(self, document_name, paragraphs, vision_model):
+            enriched = []
+            rejected_ids = set()
+            kept_descriptions = {}
+            seen_hashes = set()
+            request_image_ids = getattr(self, "_request_image_ids", set())
+            page_states = []
+            total_images = sum(
+                len(self._image_file_ids(str(paragraph.get("content") or "")))
+                for paragraph in paragraphs
+            )
+            filtered_images = 0
+            self._report_progress("filtering", 0, total_images, "正在筛选候选图片")
+            for paragraph in paragraphs:
+                item = dict(paragraph)
+                content = str(item.get("content") or "")
+                image_ids = self._image_file_ids(content)
+                decisions = {}
+                candidates = []
+                for file_id in image_ids:
+                    if file_id not in request_image_ids:
+                        raise AppApiException(500, _("Document image does not belong to this upload"))
+                    image_file = QuerySet(File).filter(id=file_id).first()
+                    if image_file is None:
+                        raise AppApiException(500, _("Document image does not exist"))
+                    image_bytes = image_file.get_bytes()
+                    image_hash = image_file.sha256_hash
+                    if image_hash and image_hash in seen_hashes:
+                        decisions[file_id] = {"keep": False, "description": "", "reason": "duplicate"}
+                        filtered_images += 1
+                        self._report_progress(
+                            "filtering",
+                            filtered_images,
+                            total_images,
+                            f"正在筛选图片，第 {filtered_images}/{total_images} 张",
+                        )
+                        continue
+                    if image_hash:
+                        seen_hashes.add(image_hash)
+                    if not self._is_meaningful_image_candidate(image_bytes):
+                        decisions[file_id] = {"keep": False, "description": "", "reason": "artifact"}
+                    else:
+                        candidates.append((file_id, image_bytes))
+                    filtered_images += 1
+                    self._report_progress(
+                        "filtering",
+                        filtered_images,
+                        total_images,
+                        f"正在筛选图片，第 {filtered_images}/{total_images} 张",
+                    )
+                page_states.append(
+                    {
+                        "item": item,
+                        "content": content,
+                        "image_ids": image_ids,
+                        "decisions": decisions,
+                        "candidates": candidates,
+                    }
+                )
+
+            total_vision_batches = sum(
+                (len(state["candidates"]) + self.MODEL_IMAGE_LIMIT - 1)
+                // self.MODEL_IMAGE_LIMIT
+                for state in page_states
+            )
+            completed_vision_batches = 0
+            self._report_progress("vision", 0, total_vision_batches, "正在识别有效插图")
+            for state in page_states:
+                item = state["item"]
+                content = state["content"]
+                image_ids = state["image_ids"]
+                decisions = state["decisions"]
+                candidates = state["candidates"]
+                for start in range(0, len(candidates), self.MODEL_IMAGE_LIMIT):
+                    batch = candidates[start : start + self.MODEL_IMAGE_LIMIT]
+                    batch_ids = [file_id for file_id, _ in batch]
+                    prompt = self._vision_prompt(
+                        document_name,
+                        str(item.get("title") or ""),
+                        content,
+                        batch_ids,
+                        item.get("page_number"),
+                    )
+                    try:
+                        response = vision_model.invoke([self._vision_message(prompt, batch)])
+                    except AppApiException:
+                        raise
+                    except Exception as e:
+                        raise AppApiException(500, str(e)) from e
+                    payload = self._loads_json_payload(self._response_content(response))
+                    decisions.update(self._normalize_vision_images(payload, batch_ids))
+                    completed_vision_batches += 1
+                    self._report_progress(
+                        "vision",
+                        completed_vision_batches,
+                        total_vision_batches,
+                        f"正在识别图片，第 {completed_vision_batches}/{total_vision_batches} 批",
+                    )
+
+                for file_id in image_ids:
+                    decision = decisions[file_id]
+                    if decision["keep"]:
+                        content = self._replace_image_reference(content, file_id, decision["description"])
+                        kept_descriptions[file_id] = decision["description"]
+                    else:
+                        content = self._remove_image_reference(content, file_id)
+                        rejected_ids.add(file_id)
+                content = re.sub(r"\n{3,}", "\n\n", content).strip()
+                if content:
+                    item["content"] = content
+                    enriched.append(item)
+            return enriched, rejected_ids, kept_descriptions
+
         def _model_split_prompt(self, document_name, content, limit, split_strategy):
             vision_tip = (
-                "你会同时收到文档中的图片，请结合图片里的文字、图表和上下文决定分段，并把关键图片信息写进相关段落。"
+                "图片已由视觉模型筛选并生成说明。请保留每个图片 Markdown 引用及其说明，"
+                "把它们与相关正文放在同一段落，不得新增、修改、遗漏或重复图片引用。"
                 if split_strategy == self.LLM_VISION_STRATEGY
                 else "如果内容中出现图片 Markdown 引用，只保留引用，不要臆测图片里的内容。"
             )
@@ -1298,7 +1532,7 @@ class DocumentSerializers(serializers.Serializer):
                 return HumanMessage(content=prompt)
             return HumanMessage(content=[{"type": "text", "text": prompt}, *image_messages])
 
-        def _normalize_model_paragraphs(self, payload, limit):
+        def _normalize_model_paragraphs(self, payload, limit, preserve_image_blocks=False):
             paragraphs = payload.get("paragraphs") if isinstance(payload, dict) else payload
             if not isinstance(paragraphs, list):
                 raise AppApiException(500, _("Model split result is not valid JSON"))
@@ -1316,12 +1550,42 @@ class DocumentSerializers(serializers.Serializer):
 
                 if not content:
                     continue
-                for split_content in smart_split_paragraph(content, limit):
+                split_contents = (
+                    [content]
+                    if preserve_image_blocks and self._image_file_ids(content)
+                    else smart_split_paragraph(content, limit)
+                )
+                for split_content in split_contents:
                     if split_content.strip():
                         result.append({"title": title, "content": split_content.strip()})
             if not result:
                 raise AppApiException(500, _("Model split result is empty"))
             return result
+
+        def _validate_image_references(
+            self, source_paragraphs, result_paragraphs, kept_descriptions=None
+        ):
+            source_ids = Counter(
+                file_id
+                for paragraph in source_paragraphs
+                for file_id in self._all_image_file_ids(str(paragraph.get("content") or ""))
+            )
+            result_ids = Counter(
+                file_id
+                for paragraph in result_paragraphs
+                for file_id in self._all_image_file_ids(str(paragraph.get("content") or ""))
+            )
+            if source_ids != result_ids:
+                raise AppApiException(500, _("Model split changed document image references"))
+            kept_descriptions = kept_descriptions or {}
+            for paragraph in result_paragraphs:
+                content = str(paragraph.get("content") or "")
+                if self._image_file_ids(content) and not re.sub(r"!\[[^]]*\]\([^)]+\)", "", content).strip():
+                    raise AppApiException(500, _("Image paragraphs must include descriptions"))
+                for file_id in self._image_file_ids(content):
+                    description = kept_descriptions.get(file_id)
+                    if description and f"图片说明：{description}" not in content:
+                        raise AppApiException(500, _("Model split removed an image description"))
 
         def _split_content_with_model(self, document_name, paragraphs, split_strategy, model_id, limit):
             limit = self._normalize_limit(limit)
@@ -1329,9 +1593,11 @@ class DocumentSerializers(serializers.Serializer):
             if not blocks:
                 return paragraphs
 
-            llm_model = self._get_model(model_id, split_strategy)
+            llm_model = self._get_model(model_id, ModelTypeConst.LLM.name)
             result = []
-            for batch in self._batch_blocks(blocks, split_strategy):
+            batches = self._batch_blocks(blocks, split_strategy)
+            self._report_progress("splitting", 0, len(batches), "正在进行文本语义切分")
+            for index, batch in enumerate(batches, start=1):
                 prompt = self._model_split_prompt(document_name, batch, limit, split_strategy)
                 message = self._model_message(prompt, batch, split_strategy)
                 try:
@@ -1342,7 +1608,47 @@ class DocumentSerializers(serializers.Serializer):
                     raise AppApiException(500, str(e)) from e
                 payload = self._loads_json_payload(self._response_content(response))
                 result.extend(self._normalize_model_paragraphs(payload, limit))
+                self._report_progress(
+                    "splitting",
+                    index,
+                    len(batches),
+                    f"正在切分文本，第 {index}/{len(batches)} 批",
+                )
             return result
+
+        def _split_vision_content(self, document_name, paragraphs, vision_model_id, llm_model_id, limit):
+            limit = self._normalize_limit(limit)
+            vision_model = self._get_model(vision_model_id, ModelTypeConst.IMAGE.name)
+            enriched, rejected_ids, kept_descriptions = self._enrich_paragraphs_with_vision(
+                document_name, paragraphs, vision_model
+            )
+            if not enriched:
+                return [], rejected_ids
+            blocks = self._paragraph_blocks(enriched, limit)
+            llm_model = self._get_model(llm_model_id, ModelTypeConst.LLM.name)
+            result = []
+            batches = self._batch_blocks(blocks, self.LLM_TEXT_STRATEGY)
+            self._report_progress("splitting", 0, len(batches), "正在进行文本语义切分")
+            for index, batch in enumerate(batches, start=1):
+                prompt = self._model_split_prompt(document_name, batch, limit, self.LLM_VISION_STRATEGY)
+                try:
+                    response = llm_model.invoke([HumanMessage(content=prompt)])
+                except AppApiException:
+                    raise
+                except Exception as e:
+                    raise AppApiException(500, str(e)) from e
+                payload = self._loads_json_payload(self._response_content(response))
+                result.extend(
+                    self._normalize_model_paragraphs(payload, limit, preserve_image_blocks=True)
+                )
+                self._report_progress(
+                    "splitting",
+                    index,
+                    len(batches),
+                    f"正在切分文本，第 {index}/{len(batches)} 批",
+                )
+            self._validate_image_references(enriched, result, kept_descriptions)
+            return result, rejected_ids
 
         def _wrap_split_result(self, result, file_id):
             result_list = result if isinstance(result, list) else [result]
@@ -1350,21 +1656,46 @@ class DocumentSerializers(serializers.Serializer):
                 item["source_file_id"] = file_id
             return result_list
 
-        def _apply_model_split(self, result_list, split_strategy, model_id, limit):
+        def _apply_model_split(
+            self, result_list, split_strategy, model_id, vision_model_id, llm_model_id, limit
+        ):
             if split_strategy not in self.MODEL_SPLIT_STRATEGIES:
                 return result_list
             for result in result_list:
-                result["content"] = self._split_content_with_model(
-                    result.get("name") or "",
-                    result.get("content") or [],
-                    split_strategy,
-                    model_id,
-                    limit,
-                )
+                if split_strategy == self.LLM_VISION_STRATEGY:
+                    content, rejected_ids = self._split_vision_content(
+                        result.get("name") or "",
+                        result.get("content") or [],
+                        vision_model_id,
+                        llm_model_id,
+                        limit,
+                    )
+                    result["content"] = content
+                    owned_rejected_ids = rejected_ids.intersection(
+                        getattr(self, "_request_image_ids", set())
+                    )
+                    if owned_rejected_ids:
+                        QuerySet(File).filter(id__in=owned_rejected_ids).delete()
+                else:
+                    result["content"] = self._split_content_with_model(
+                        result.get("name") or "",
+                        result.get("content") or [],
+                        split_strategy,
+                        model_id,
+                        limit,
+                    )
             return result_list
 
         def file_to_paragraph(
-            self, file, pattern_list: List, with_filter: bool, limit: int, split_strategy=None, model_id=None
+            self,
+            file,
+            pattern_list: List,
+            with_filter: bool,
+            limit: int,
+            split_strategy=None,
+            model_id=None,
+            vision_model_id=None,
+            llm_model_id=None,
         ):
             # 保存源文件
             file_id = uuid.uuid7()
@@ -1376,16 +1707,26 @@ class DocumentSerializers(serializers.Serializer):
                 source_id=self.data.get("knowledge_id"),
             )
             raw_file.save(file.read())
+            if hasattr(self, "_request_source_file_ids"):
+                self._request_source_file_ids.add(str(raw_file.id))
             file.seek(0)
 
             get_buffer = FileBufferHandle().get_buffer
             for split_handle in split_handles:
                 if split_handle.support(file, get_buffer):
-                    result = split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, self.save_image)
+                    if split_strategy == self.LLM_VISION_STRATEGY and isinstance(split_handle, PdfSplitHandle):
+                        result = split_handle.handle_for_vision(file, self.save_image)
+                    else:
+                        result = split_handle.handle(
+                            file, pattern_list, with_filter, limit, get_buffer, self.save_image
+                        )
+                    wrapped_result = self._wrap_split_result(result, file_id)
                     return self._apply_model_split(
-                        self._wrap_split_result(result, file_id),
+                        wrapped_result,
                         split_strategy,
                         model_id,
+                        vision_model_id,
+                        llm_model_id,
                         limit,
                     )
             result = default_split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, self.save_image)
@@ -1393,6 +1734,8 @@ class DocumentSerializers(serializers.Serializer):
                 self._wrap_split_result(result, file_id),
                 split_strategy,
                 model_id,
+                vision_model_id,
+                llm_model_id,
                 limit,
             )
 

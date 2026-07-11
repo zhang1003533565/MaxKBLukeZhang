@@ -71,3 +71,19 @@ class PdfSplitHandleImageTest(SimpleTestCase):
 
         self.assertIn("![image](./oss/file/019f4c58-6cd6-7792-9b83-0f0e3525dd10)", content)
         self.assertNotIn("image_0_0", content)
+
+    def test_build_vision_pages_keeps_page_text_and_images_together(self):
+        pdf_document = SimpleNamespace(
+            pages=[FakePage(text="页面标题\n页面正文"), FakePage(text="第二页正文")]
+        )
+        references = {
+            0: ["![image](./oss/file/019f4c58-6cd6-7792-9b83-0f0e3525dd10)"],
+        }
+
+        pages = PdfSplitHandle.build_vision_pages(pdf_document, references)
+
+        self.assertEqual(len(pages), 2)
+        self.assertEqual(pages[0]["page_number"], 1)
+        self.assertEqual(pages[0]["title"], "页面标题")
+        self.assertIn("页面正文", pages[0]["content"])
+        self.assertIn(references[0][0], pages[0]["content"])

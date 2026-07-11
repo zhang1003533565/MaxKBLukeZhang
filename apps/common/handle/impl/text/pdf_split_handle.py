@@ -52,6 +52,30 @@ def get_pdf_object(value):
 
 
 class PdfSplitHandle(BaseSplitHandle):
+    def handle_for_vision(self, file, save_image):
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            for chunk in file.chunks():
+                temp_file.write(chunk)
+            temp_file_path = temp_file.name
+
+        try:
+            with open(temp_file_path, "rb") as pdf_file:
+                pdf_document = PdfReader(pdf_file)
+                page_image_references, image_files = self.extract_document_images(pdf_document)
+                if image_files:
+                    save_image(image_files)
+                return {
+                    "name": file.name,
+                    "content": self.build_vision_pages(pdf_document, page_image_references),
+                }
+        except BaseException as e:
+            maxkb_logger.error(
+                f"File: {file.name}, error: {e}, {traceback.format_exc()}"
+            )
+            raise
+        finally:
+            os.remove(temp_file_path)
+
     def handle(
         self,
         file,
@@ -162,6 +186,26 @@ class PdfSplitHandle(BaseSplitHandle):
             )
 
         return content
+
+    @staticmethod
+    def build_vision_pages(pdf_document, page_image_references=None):
+        page_image_references = page_image_references or {}
+        pages = []
+        for page_num, page in enumerate(pdf_document.pages):
+            lines = [text for text, _ in PdfSplitHandle.extract_page_lines(page) if text]
+            image_references = page_image_references.get(page_num, [])
+            content_parts = ["\n".join(lines).strip(), "\n\n".join(image_references)]
+            content = "\n\n".join(part for part in content_parts if part).replace("\0", "").strip()
+            if not content:
+                continue
+            pages.append(
+                {
+                    "title": lines[0][:256] if lines else f"第 {page_num + 1} 页",
+                    "content": content,
+                    "page_number": page_num + 1,
+                }
+            )
+        return pages
 
     @staticmethod
     def extract_page_lines(page):

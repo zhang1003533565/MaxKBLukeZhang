@@ -1,6 +1,9 @@
+import uuid_utils.compat as uuid
+
 from common.auth import TokenAuth
 from common.auth.authentication import has_permissions
 from common.constants.permission_constants import CompareConstants, PermissionConstants, RoleConstants, ViewPermission
+from common.exception.app_exception import AppApiException
 from common.log.log import log
 from common.result import result
 from django.utils.translation import gettext_lazy as _
@@ -36,11 +39,40 @@ from knowledge.api.document import (
 from knowledge.api.tag import DocsTagDeleteAPI
 from knowledge.serializers.common import get_knowledge_operation_object
 from knowledge.serializers.document import DocumentSerializers
+from knowledge.models import File, FileSourceType
+from knowledge.task.split_preview import (
+    create_split_task_state,
+    get_split_task_state,
+    split_document_preview_task,
+    update_split_task_state,
+)
 from knowledge.views.common import (
     get_document_operation_object,
     get_document_operation_object_batch,
     get_knowledge_document_operation_object,
 )
+
+
+def build_document_split_data(request):
+    split_data = {"file": request.FILES.getlist("file")}
+    request_data = request.data
+    if (
+        "patterns" in request.data
+        and request.data.get("patterns") is not None
+        and len(request.data.get("patterns")) > 0
+    ):
+        split_data["patterns"] = request_data.getlist("patterns")
+    for field in [
+        "limit",
+        "with_filter",
+        "split_strategy",
+        "model_id",
+        "vision_model_id",
+        "llm_model_id",
+    ]:
+        if field in request.data:
+            split_data[field] = request_data.get(field)
+    return split_data
 
 
 class DocumentView(APIView):
@@ -238,30 +270,110 @@ class DocumentView(APIView):
             ),
         )
         def post(self, request: Request, workspace_id: str, knowledge_id: str):
-            split_data = {"file": request.FILES.getlist("file")}
-            request_data = request.data
-            if (
-                "patterns" in request.data
-                and request.data.get("patterns") is not None
-                and len(request.data.get("patterns")) > 0
-            ):
-                split_data.__setitem__("patterns", request_data.getlist("patterns"))
-            if "limit" in request.data:
-                split_data.__setitem__("limit", request_data.get("limit"))
-            if "with_filter" in request.data:
-                split_data.__setitem__("with_filter", request_data.get("with_filter"))
-            if "split_strategy" in request.data:
-                split_data.__setitem__("split_strategy", request_data.get("split_strategy"))
-            if "model_id" in request.data:
-                split_data.__setitem__("model_id", request_data.get("model_id"))
             return result.success(
                 DocumentSerializers.Split(
                     data={
                         "workspace_id": workspace_id,
                         "knowledge_id": knowledge_id,
                     }
-                ).parse(split_data)
+                ).parse(build_document_split_data(request))
             )
+
+    class SplitTask(APIView):
+        authentication_classes = [TokenAuth]
+        parser_classes = [MultiPartParser]
+
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_DOCUMENT_READ.get_workspace_knowledge_permission(),
+            PermissionConstants.KNOWLEDGE_DOCUMENT_READ.get_workspace_permission_workspace_manage_role(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            ViewPermission(
+                [RoleConstants.USER.get_workspace_role()],
+                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                CompareConstants.AND,
+            ),
+        )
+        def post(self, request: Request, workspace_id: str, knowledge_id: str):
+            split_data = build_document_split_data(request)
+            split_serializer = DocumentSerializers.Split(
+                data={"workspace_id": workspace_id, "knowledge_id": knowledge_id}
+            )
+            split_serializer.is_valid(instance=split_data, raise_exception=True)
+            DocumentSerializers.Split._validate_model_selection(
+                split_data.get("split_strategy") or "",
+                split_data.get("model_id"),
+                split_data.get("vision_model_id"),
+                split_data.get("llm_model_id"),
+            )
+            task_id = str(uuid.uuid7())
+            input_file_ids = []
+            try:
+                for uploaded_file in split_data["file"]:
+                    input_file = File(
+                        file_name=uploaded_file.name,
+                        source_type=FileSourceType.TEMPORARY_120_MINUTE.value,
+                        source_id=task_id,
+                        meta={"split_preview_task_id": task_id},
+                    )
+                    input_file.save(uploaded_file.read())
+                    input_file_ids.append(str(input_file.id))
+                create_split_task_state(
+                    task_id, request.user.id, workspace_id, knowledge_id
+                )
+                split_config = {
+                    key: value
+                    for key, value in split_data.items()
+                    if key != "file" and value is not None
+                }
+                split_document_preview_task.delay(
+                    task_id,
+                    str(request.user.id),
+                    workspace_id,
+                    knowledge_id,
+                    input_file_ids,
+                    split_config,
+                )
+            except Exception as e:
+                if input_file_ids:
+                    File.objects.filter(id__in=input_file_ids).delete()
+                update_split_task_state(
+                    task_id,
+                    status="failed",
+                    stage="failed",
+                    message="任务提交失败",
+                    error=str(e),
+                )
+                raise
+            return result.success({"task_id": task_id, "status": "queued"})
+
+    class SplitTaskStatus(APIView):
+        authentication_classes = [TokenAuth]
+
+        @has_permissions(
+            PermissionConstants.KNOWLEDGE_DOCUMENT_READ.get_workspace_knowledge_permission(),
+            PermissionConstants.KNOWLEDGE_DOCUMENT_READ.get_workspace_permission_workspace_manage_role(),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
+            ViewPermission(
+                [RoleConstants.USER.get_workspace_role()],
+                [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()],
+                CompareConstants.AND,
+            ),
+        )
+        def get(
+            self,
+            request: Request,
+            workspace_id: str,
+            knowledge_id: str,
+            task_id: str,
+        ):
+            state = get_split_task_state(task_id)
+            if state is None or (
+                state.get("user_id") != str(request.user.id)
+                or state.get("workspace_id") != str(workspace_id)
+                or state.get("knowledge_id") != str(knowledge_id)
+            ):
+                raise AppApiException(404, _("Split preview task expired or does not exist"))
+            return result.success(state)
 
     class SplitPattern(APIView):
         authentication_classes = [TokenAuth]

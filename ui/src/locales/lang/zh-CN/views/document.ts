@@ -83,10 +83,12 @@ export default {
     },
     llmVision: {
       label: '大模型图文分段',
-      text: '使用支持图片理解的图文模型，结合文档图片和文字重新切分',
+      text: '先用图文模型筛选并理解有效插图，再用文本模型进行语义切分',
     },
     model: {
       label: '切分模型',
+      llmLabel: '文本分段模型',
+      visionLabel: '图文理解模型',
       llmPlaceholder: '请选择文本大模型',
       visionPlaceholder: '请选择图文大模型',
     },
@@ -107,9 +109,14 @@ export default {
     },
     progress: {
       uploading: '正在上传文档',
+      queued: '任务已提交，等待处理',
+      processing: '正在处理文档',
       parsing: '上传完成，正在解析分段',
       ready: '草稿已生成',
       failed: '处理失败，请重新生成预览',
+      expired: '任务已过期或无法访问，请重新生成预览',
+      uploadInterrupted: '页面刷新中断了文件上传，请重新生成预览',
+      counts: '已处理 {processed} / {total} 批 · 剩余 {remaining} 批',
       files: '文件：',
       draft: '已保留当前上传草稿',
     },

@@ -50,7 +50,15 @@ class DocumentSplitAPI(APIMixin):
                     },
                     'model_id': {
                         'type': 'string',
-                        'description': '大模型切分时使用的模型 ID'
+                        'description': 'llm_text 使用的文本模型 ID'
+                    },
+                    'vision_model_id': {
+                        'type': 'string',
+                        'description': 'llm_vision 图文理解阶段使用的视觉模型 ID'
+                    },
+                    'llm_model_id': {
+                        'type': 'string',
+                        'description': 'llm_vision 最终分段阶段使用的文本模型 ID'
                     }
                 }
             }

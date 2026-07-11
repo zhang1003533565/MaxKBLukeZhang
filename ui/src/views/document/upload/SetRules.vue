@@ -118,14 +118,27 @@
                   </el-radio>
 
                   <div v-if="radio === '4'" class="model-select mt-16" style="margin-left: 30px">
-                    <div class="title mb-8">{{ $t('views.document.setRules.model.label') }}</div>
+                    <div class="title mb-8">
+                      {{ $t('views.document.setRules.model.visionLabel') }}
+                    </div>
                     <ModelSelect
-                      v-model="activeModelId"
+                      v-model="form.vision_model_id"
                       :placeholder="$t('views.document.setRules.model.visionPlaceholder')"
                       :options="visionModelOptions"
                       @submitModel="getSelectModel('IMAGE')"
                       showFooter
                       :model-type="'IMAGE'"
+                    />
+                    <div class="title mt-16 mb-8">
+                      {{ $t('views.document.setRules.model.llmLabel') }}
+                    </div>
+                    <ModelSelect
+                      v-model="form.llm_model_id"
+                      :placeholder="$t('views.document.setRules.model.llmPlaceholder')"
+                      :options="llmModelOptions"
+                      @submitModel="getSelectModel('LLM')"
+                      showFooter
+                      :model-type="'LLM'"
                     />
                   </div>
                 </el-card>
@@ -170,7 +183,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, reactive, watch } from 'vue'
 import ParagraphPreview from '@/views/knowledge/component/ParagraphPreview.vue'
 import { useRoute } from 'vue-router'
 import { cutFilename } from '@/utils/common'
@@ -211,6 +224,9 @@ const currentDraft = computed(() => {
   return knowledge.documentUploadDraft?.key === draftKey.value ? knowledge.documentUploadDraft : null
 })
 const draftProgress = computed(() => currentDraft.value?.progress || 0)
+const taskProcessed = computed(() => currentDraft.value?.processed || 0)
+const taskTotal = computed(() => currentDraft.value?.total || 0)
+const taskRemaining = computed(() => currentDraft.value?.remaining || 0)
 const progressStatus = computed(() => {
   if (currentDraft.value?.status === 'ready') {
     return 'success'
@@ -225,6 +241,12 @@ const progressTitle = computed(() => {
   if (status === 'uploading') {
     return t('views.document.setRules.progress.uploading')
   }
+  if (status === 'queued') {
+    return t('views.document.setRules.progress.queued')
+  }
+  if (status === 'processing') {
+    return currentDraft.value?.message || t('views.document.setRules.progress.processing')
+  }
   if (status === 'parsing') {
     return t('views.document.setRules.progress.parsing')
   }
@@ -237,6 +259,13 @@ const progressTitle = computed(() => {
   return ''
 })
 const progressTip = computed(() => {
+  if (taskTotal.value > 0) {
+    return t('views.document.setRules.progress.counts', {
+      processed: taskProcessed.value,
+      total: taskTotal.value,
+      remaining: taskRemaining.value,
+    })
+  }
   const fileNames = currentDraft.value?.fileNames || []
   return fileNames.length > 0
     ? `${t('views.document.setRules.progress.files')}${fileNames.join('、')}`
@@ -244,6 +273,7 @@ const progressTip = computed(() => {
 })
 
 const firstChecked = ref(true)
+let pollingTimer: ReturnType<typeof setTimeout> | undefined
 
 const form = reactive<{
   patterns: Array<string>
@@ -260,7 +290,6 @@ const form = reactive<{
   vision_model_id: '',
 })
 
-const isModelSplit = computed(() => radio.value === '3' || radio.value === '4')
 const splitStrategy = computed(() => {
   if (radio.value === '3') {
     return 'llm_text'
@@ -282,7 +311,16 @@ const activeModelId = computed({
   },
 })
 const previewDisabled = computed(() => {
-  return loading.value || (isModelSplit.value && !activeModelId.value)
+  if (loading.value) {
+    return true
+  }
+  if (radio.value === '3') {
+    return !form.llm_model_id
+  }
+  if (radio.value === '4') {
+    return !form.vision_model_id || !form.llm_model_id
+  }
+  return false
 })
 const canImport = computed(() => {
   return !loading.value && paragraphList.value.length > 0 && currentDraft.value?.status === 'ready'
@@ -329,7 +367,11 @@ function applyDraft(draft: DocumentUploadDraft | null) {
   if (!draft || draft.key !== draftKey.value) {
     return
   }
-  if ((draft.status === 'uploading' || draft.status === 'parsing') && !draft.startedByUser) {
+  if (
+    (draft.status === 'uploading' || draft.status === 'parsing') &&
+    !draft.startedByUser &&
+    !draft.backendTaskId
+  ) {
     knowledge.clearDocumentUploadDraft()
     loading.value = false
     paragraphList.value = []
@@ -343,7 +385,70 @@ function applyDraft(draft: DocumentUploadDraft | null) {
   form.vision_model_id = draft.form?.vision_model_id || ''
   checkedConnect.value = Boolean(draft.checkedConnect)
   paragraphList.value = draft.paragraphList || []
-  loading.value = draft.status === 'uploading' || draft.status === 'parsing'
+  loading.value = ['uploading', 'queued', 'processing', 'parsing'].includes(draft.status)
+}
+
+function stopPolling() {
+  if (pollingTimer) {
+    clearTimeout(pollingTimer)
+    pollingTimer = undefined
+  }
+}
+
+function pollSplitTask(backendTaskId: string, taskId: string) {
+  stopPolling()
+  loadSharedApi({ type: 'document', systemType: apiType.value })
+    .getSplitDocumentTask(id, backendTaskId)
+    .then((res: any) => {
+      if (knowledge.documentUploadDraft?.taskId !== taskId) {
+        return
+      }
+      const task = res.data || {}
+      if (task.status === 'completed') {
+        const list = postParagraphList(task.result || [])
+        paragraphList.value = list
+        loading.value = false
+        knowledge.patchDocumentUploadDraft({
+          status: 'ready',
+          progress: 100,
+          stage: 'completed',
+          processed: task.processed || 1,
+          total: task.total || 1,
+          remaining: 0,
+          message: task.message,
+          paragraphList: list,
+        })
+        return
+      }
+      if (task.status === 'failed') {
+        loading.value = false
+        knowledge.patchDocumentUploadDraft({
+          status: 'failed',
+          stage: 'failed',
+          message: task.error || task.message || t('views.document.setRules.progress.failed'),
+        })
+        return
+      }
+      knowledge.patchDocumentUploadDraft({
+        status: task.status === 'queued' ? 'queued' : 'processing',
+        progress: Math.max(knowledge.documentUploadDraft?.progress || 0, task.progress || 0),
+        stage: task.stage,
+        processed: task.processed || 0,
+        total: task.total || 0,
+        remaining: task.remaining || 0,
+        message: task.message,
+      })
+      pollingTimer = setTimeout(() => pollSplitTask(backendTaskId, taskId), 1000)
+    })
+    .catch(() => {
+      if (knowledge.documentUploadDraft?.taskId === taskId) {
+        loading.value = false
+        knowledge.patchDocumentUploadDraft({
+          status: 'failed',
+          message: t('views.document.setRules.progress.expired'),
+        })
+      }
+    })
 }
 
 function postParagraphList(list: any[]) {
@@ -371,6 +476,7 @@ function splitDocument() {
     return
   }
   loading.value = true
+  stopPolling()
   const fd = new FormData()
   const uploadFiles = documentsFiles.value.filter((item) => item?.raw)
   const totalSize = uploadFiles.reduce((sum, item) => sum + (item.size || item.raw?.size || 0), 0)
@@ -390,7 +496,12 @@ function splitDocument() {
   }
   if (splitStrategy.value) {
     fd.append('split_strategy', splitStrategy.value)
-    fd.append('model_id', activeModelId.value)
+    if (splitStrategy.value === 'llm_text') {
+      fd.append('model_id', form.llm_model_id)
+    } else {
+      fd.append('vision_model_id', form.vision_model_id)
+      fd.append('llm_model_id', form.llm_model_id)
+    }
   }
 
   const taskId = `${Date.now()}-${Math.random()}`
@@ -412,6 +523,11 @@ function splitDocument() {
     checkedConnect: checkedConnect.value,
     radio: radio.value,
     startedByUser: true,
+    backendTaskId: undefined,
+    stage: 'uploading',
+    processed: 0,
+    total: 0,
+    remaining: 0,
     form: {
       patterns: [...form.patterns],
       limit: form.limit,
@@ -427,25 +543,28 @@ function splitDocument() {
     if (!total) {
       return
     }
-    const uploadPercent = Math.round((progressEvent.loaded / total) * 90)
+    const uploadPercent = Math.round((progressEvent.loaded / total) * 5)
     patchCurrentDraft({
-      status: progressEvent.loaded >= total ? 'parsing' : 'uploading',
-      progress: Math.min(progressEvent.loaded >= total ? 95 : uploadPercent, 95),
+      status: 'uploading',
+      progress: Math.min(uploadPercent, 5),
     })
   }
 
   const request = loadSharedApi({ type: 'document', systemType: apiType.value })
-    .postSplitDocument(id, fd, onUploadProgress)
+    .postSplitDocumentTask(id, fd, onUploadProgress)
     .then((res: any) => {
-      const list = postParagraphList(res.data)
-
-      paragraphList.value = list
-      loading.value = false
+      const backendTaskId = res.data?.task_id
+      if (!backendTaskId) {
+        throw new Error('Missing split preview task id')
+      }
       patchCurrentDraft({
-        status: 'ready',
-        progress: 100,
-        paragraphList: list,
+        status: 'queued',
+        progress: Math.max(draftProgress.value, 5),
+        backendTaskId,
+        stage: 'queued',
+        message: t('views.document.setRules.progress.queued'),
       })
+      pollSplitTask(backendTaskId, taskId)
     })
     .catch(() => {
       loading.value = false
@@ -486,6 +605,7 @@ function initModelOptions() {
   }
   if (radio.value === '4') {
     getSelectModel('IMAGE')
+    getSelectModel('LLM')
   }
 }
 
@@ -496,6 +616,11 @@ watch(radio, () => {
   }
   initModelOptions()
 })
+
+watch(
+  () => [form.llm_model_id, form.vision_model_id],
+  () => patchDraftConfig(),
+)
 
 watch(
   () => knowledge.documentUploadDraft,
@@ -509,8 +634,24 @@ onMounted(() => {
   if (currentDraft.value) {
     applyDraft(currentDraft.value)
     initModelOptions()
+    if (currentDraft.value.status === 'uploading' && !currentDraft.value.backendTaskId) {
+      loading.value = false
+      knowledge.patchDocumentUploadDraft({
+        status: 'failed',
+        message: t('views.document.setRules.progress.uploadInterrupted'),
+      })
+      return
+    }
+    if (
+      currentDraft.value.backendTaskId &&
+      ['queued', 'processing', 'parsing'].includes(currentDraft.value.status)
+    ) {
+      pollSplitTask(currentDraft.value.backendTaskId, currentDraft.value.taskId)
+    }
   }
 })
+
+onBeforeUnmount(() => stopPolling())
 
 defineExpose({
   paragraphList,
