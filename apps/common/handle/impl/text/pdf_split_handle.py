@@ -12,15 +12,18 @@ import re
 import tempfile
 import time
 import traceback
+from io import BytesIO
 from typing import List
 
+from PIL import Image as PILImage
+from django.utils.translation import gettext_lazy as _
 from pypdf import PdfReader
 from pypdf.generic import Destination
-from django.utils.translation import gettext_lazy as _
 
 from common.handle.base_split_handle import BaseSplitHandle
 from common.utils.logger import maxkb_logger
 from common.utils.split_model import SplitModel, smart_split_paragraph
+from knowledge.models import File
 
 default_pattern_list = [
     re.compile("(?<=^)# .*|(?<=\\n)# .*"),
@@ -31,6 +34,8 @@ default_pattern_list = [
     re.compile("(?<=\\n)(?<!#)###### (?!#).*|(?<=^)(?<!#)###### (?!#).*"),
     re.compile("(?<!\n)\n\n+"),
 ]
+
+BROWSER_SAFE_IMAGE_SUFFIXES = {".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def check_links_in_pdf(doc):
@@ -70,20 +75,23 @@ class PdfSplitHandle(BaseSplitHandle):
                     limit = int(limit)
                 if type(with_filter) is str:
                     with_filter = with_filter.lower() == "true"
+                page_image_references, image_files = self.extract_document_images(pdf_document)
+                if image_files:
+                    save_image(image_files)
                 # 处理有目录的pdf
-                result = self.handle_toc(pdf_document, limit)
+                result = self.handle_toc(pdf_document, limit, page_image_references)
                 if result is not None:
                     return {"name": file.name, "content": result}
 
                 # 没目录但是有链接的pdf
                 result = self.handle_links(
-                    pdf_document, pattern_list, with_filter, limit
+                    pdf_document, pattern_list, with_filter, limit, page_image_references
                 )
                 if result is not None and len(result) > 0:
                     return {"name": file.name, "content": result}
 
                 # 没有目录的pdf
-                content = self.handle_pdf_content(file, pdf_document)
+                content = self.handle_pdf_content(file, pdf_document, page_image_references)
 
                 if pattern_list is not None and len(pattern_list) > 0:
                     split_model = SplitModel(pattern_list, with_filter, limit)
@@ -103,7 +111,8 @@ class PdfSplitHandle(BaseSplitHandle):
         return {"name": file.name, "content": split_model.parse(content)}
 
     @staticmethod
-    def handle_pdf_content(file, pdf_document):
+    def handle_pdf_content(file, pdf_document, page_image_references=None):
+        page_image_references = page_image_references or {}
         # 第一步:收集所有字体大小
         font_sizes = []
         page_lines = []
@@ -141,8 +150,9 @@ class PdfSplitHandle(BaseSplitHandle):
                 else:  # 正文
                     content += f"{text}\n"
 
-            for image_index in range(PdfSplitHandle.get_page_image_count(page)):
-                content += f"![image](image_{page_num}_{image_index})\n\n"
+            image_references = page_image_references.get(page_num, [])
+            if image_references:
+                content += "\n\n".join(image_references) + "\n\n"
 
             content = content.replace("\0", "")
 
@@ -191,11 +201,65 @@ class PdfSplitHandle(BaseSplitHandle):
         return [(line.strip(), 0) for line in text.splitlines() if line.strip()]
 
     @staticmethod
-    def get_page_image_count(page):
-        try:
-            return len(page.images)
-        except BaseException:
-            return 0
+    def extract_document_images(pdf_document):
+        page_image_references = {}
+        image_files = []
+        for page_num, page in enumerate(pdf_document.pages):
+            try:
+                page_images = page.images
+            except Exception as e:
+                maxkb_logger.warning(
+                    f"Failed to read images from PDF page {page_num + 1}: {e}",
+                    exc_info=True,
+                )
+                continue
+
+            references = []
+            for image_index, image in enumerate(page_images):
+                try:
+                    file_name, image_data = PdfSplitHandle.prepare_pdf_image(
+                        image, page_num, image_index
+                    )
+                    if not image_data:
+                        continue
+                    image_file = File(
+                        file_name=file_name,
+                        meta={"debug": False, "content": image_data},
+                    )
+                    image_files.append(image_file)
+                    references.append(f"![image](./oss/file/{image_file.id})")
+                except Exception as e:
+                    maxkb_logger.warning(
+                        f"Failed to extract image {image_index + 1} from PDF page {page_num + 1}: {e}",
+                        exc_info=True,
+                    )
+            if references:
+                page_image_references[page_num] = references
+        return page_image_references, image_files
+
+    @staticmethod
+    def prepare_pdf_image(image, page_num, image_index):
+        file_name = os.path.basename(
+            getattr(image, "name", "")
+            or f"page_{page_num + 1}_image_{image_index + 1}.png"
+        )
+        image_data = image.data
+        suffix = os.path.splitext(file_name)[1].lower()
+        if suffix in BROWSER_SAFE_IMAGE_SUFFIXES:
+            return file_name, image_data
+
+        source_image = getattr(image, "image", None)
+        if source_image is None:
+            with PILImage.open(BytesIO(image_data)) as opened_image:
+                source_image = opened_image.copy()
+
+        has_alpha = "A" in source_image.getbands() or "transparency" in source_image.info
+        converted_image = source_image.convert("RGBA" if has_alpha else "RGB")
+        output = BytesIO()
+        converted_image.save(output, format="PNG")
+        converted_image.close()
+        normalized_name = f"{os.path.splitext(file_name)[0]}.png"
+        return normalized_name, output.getvalue()
 
     @staticmethod
     def extract_page_text(page):
@@ -231,7 +295,8 @@ class PdfSplitHandle(BaseSplitHandle):
             toc.append((level, str(title), page_number))
 
     @staticmethod
-    def handle_toc(doc, limit):
+    def handle_toc(doc, limit, page_image_references=None):
+        page_image_references = page_image_references or {}
         # 找到目录
         toc = PdfSplitHandle.get_toc(doc)
         if toc is None or len(toc) == 0:
@@ -275,6 +340,9 @@ class PdfSplitHandle(BaseSplitHandle):
                         text = text[:idx]
 
                 chapter_text += text  # 提取文本
+                image_references = page_image_references.get(page_num, [])
+                if image_references:
+                    chapter_text += "\n\n" + "\n\n".join(image_references) + "\n\n"
 
             # Null characters are not allowed.
             chapter_text = chapter_text.replace("\0", "")
@@ -296,7 +364,8 @@ class PdfSplitHandle(BaseSplitHandle):
         return chapters
 
     @staticmethod
-    def handle_links(doc, pattern_list, with_filter, limit):
+    def handle_links(doc, pattern_list, with_filter, limit, page_image_references=None):
+        page_image_references = page_image_references or {}
         # 检查文档是否包含内部链接
         if not check_links_in_pdf(doc):
             return
@@ -313,6 +382,9 @@ class PdfSplitHandle(BaseSplitHandle):
                 toc_start_page = page_num
             if toc_start_page < 0:
                 page_content += PdfSplitHandle.extract_page_text(page)
+                image_references = page_image_references.get(page_num, [])
+                if image_references:
+                    page_content += "\n\n" + "\n\n".join(image_references) + "\n\n"
             # 检查该页是否包含内部链接（即指向文档内部的页面）
             for num in range(len(links)):
                 link = links[num]
@@ -359,6 +431,9 @@ class PdfSplitHandle(BaseSplitHandle):
                         if idx > -1:
                             text = text[:idx]
                     chapter_text += text
+                    image_references = page_image_references.get(p_num, [])
+                    if image_references:
+                        chapter_text += "\n\n" + "\n\n".join(image_references) + "\n\n"
 
                 # Null characters are not allowed.
                 chapter_text = chapter_text.replace("\0", "")
@@ -551,7 +626,10 @@ class PdfSplitHandle(BaseSplitHandle):
         try:
             with open(temp_file_path, "rb") as pdf_file:
                 pdf_document = PdfReader(pdf_file)
-                return self.handle_pdf_content(file, pdf_document)
+                page_image_references, image_files = self.extract_document_images(pdf_document)
+                if image_files:
+                    save_image(image_files)
+                return self.handle_pdf_content(file, pdf_document, page_image_references)
         except BaseException as e:
             traceback.print_exception(e)
             return f"{e}"
