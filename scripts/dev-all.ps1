@@ -9,7 +9,6 @@ $RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $LocalDir = Join-Path $RootDir ".local\maxkb"
 $UiDir = Join-Path $RootDir "ui"
 $VenvDir = Join-Path $RootDir ".venv"
-$Python = Join-Path $VenvDir "Scripts\python.exe"
 $Processes = @()
 
 function Write-DevLog {
@@ -152,14 +151,17 @@ try {
     Wait-Tcp "PostgreSQL" $env:MAXKB_DB_HOST ([int]$env:MAXKB_DB_PORT)
     Wait-Tcp "Redis" $env:MAXKB_REDIS_HOST ([int]$env:MAXKB_REDIS_PORT)
 
-    if (-not (Test-Path $Python)) {
-        Write-DevLog "Creating Python virtual environment..."
-        uv venv $VenvDir --python 3.11
+    if (-not $SkipPyDeps) {
+        Write-DevLog "Syncing Python dependencies with uv..."
+        uv sync --python 3.11
+        if ($LASTEXITCODE -ne 0) {
+            throw "Python dependency sync failed with code $LASTEXITCODE."
+        }
     }
 
-    if (-not $SkipPyDeps) {
-        Write-DevLog "Checking Python dependencies..."
-        uv pip install --python $Python -r pyproject.toml
+    $UvRunArgs = @("run")
+    if ($SkipPyDeps) {
+        $UvRunArgs += "--no-sync"
     }
 
     $UiEnv = Join-Path $UiDir "env\.env"
@@ -177,13 +179,13 @@ try {
 
     if ($env:MAXKB_DEV_SKIP_PREP -ne "true") {
         Write-DevLog "Preparing backend static files..."
-        & $Python "main.py" "collect_static"
+        uv @UvRunArgs python "main.py" "collect_static"
         if ($LASTEXITCODE -ne 0) {
             throw "Backend static preparation failed with code $LASTEXITCODE."
         }
 
         Write-DevLog "Applying database migrations..."
-        & $Python "main.py" "upgrade_db"
+        uv @UvRunArgs python "main.py" "upgrade_db"
         if ($LASTEXITCODE -ne 0) {
             throw "Database migration failed with code $LASTEXITCODE."
         }
@@ -192,8 +194,8 @@ try {
     [Environment]::SetEnvironmentVariable("MAXKB_SKIP_DEV_PREP", "true", "Process")
 
     Write-DevLog "Starting backend, celery, and frontend..."
-    Start-DevProcess "backend" $Python @("main.py", "dev", "web") $RootDir
-    Start-DevProcess "celery" $Python @("main.py", "dev", "celery") $RootDir
+    Start-DevProcess "backend" "uv" ($UvRunArgs + @("python", "main.py", "dev", "web")) $RootDir
+    Start-DevProcess "celery" "uv" ($UvRunArgs + @("python", "main.py", "dev", "celery")) $RootDir
     Start-DevProcess "frontend" "npm.cmd" @("run", "dev") $UiDir
 
     Write-DevLog "Ready:"

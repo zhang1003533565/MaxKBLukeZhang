@@ -1,3 +1,80 @@
+## 手动启动（Windows + PowerShell）
+
+先写入本地配置文件，避免每次手动启动都设置环境变量：
+
+```powershell
+cd E:\zzs\github\MaxKBLukeZhang
+
+New-Item -ItemType Directory -Force E:\opt\maxkb\conf
+
+@"
+DB_NAME: maxkb
+DB_HOST: 127.0.0.1
+DB_PORT: 5432
+DB_USER: root
+DB_PASSWORD: Password123@postgres
+DB_ENGINE: dj_db_conn_pool.backends.postgresql
+DB_MAX_OVERFLOW: 80
+
+REDIS_HOST: 127.0.0.1
+REDIS_PORT: 6380
+REDIS_PASSWORD: Password123@redis
+REDIS_DB: 0
+REDIS_MAX_CONNECTIONS: 100
+
+DEBUG: true
+LOG_LEVEL: DEBUG
+KNOWLEDGE_ONLY: true
+DEFAULT_PASSWORD: LiuguangKB@123..
+"@ | Set-Content -Encoding UTF8 E:\opt\maxkb\conf\config.yml
+```
+
+初始化依赖和数据库：
+
+```powershell
+cd E:\zzs\github\MaxKBLukeZhang
+
+docker compose -f docker-compose.dev.yml up -d --wait
+uv sync --python 3.11
+uv run python main.py collect_static
+uv run python main.py upgrade_db
+```
+
+启动后端：
+
+```powershell
+cd E:\zzs\github\MaxKBLukeZhang
+uv run python main.py dev web
+```
+
+另开一个 PowerShell 启动 Celery：
+
+```powershell
+cd E:\zzs\github\MaxKBLukeZhang
+uv run python main.py dev celery
+```
+
+另开一个 PowerShell 启动前端：
+
+```powershell
+cd E:\zzs\github\MaxKBLukeZhang\ui
+npm install
+npm run dev
+```
+
+访问地址：
+
+```text
+http://localhost:3000/admin
+```
+
+初始账号：
+
+```text
+账号：admin
+密码：LiuguangKB@123..
+```
+
 # 流光知识库
 
 流光知识库是流光小队的项目知识中枢，用来沉淀资料、整理文档、完成向量化检索，并把可复用的知识能力开放给内部系统。

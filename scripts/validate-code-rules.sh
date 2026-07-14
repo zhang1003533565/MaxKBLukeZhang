@@ -66,15 +66,15 @@ run_python_checks() {
     return
   fi
 
-  if [ -x .venv/bin/ruff ]; then
+  if command -v uv >/dev/null 2>&1 && [ -d .venv ]; then
     echo "[code-rules] Checking Python with Ruff..."
     # shellcheck disable=SC2086
-    .venv/bin/ruff check $files
+    uv run --no-sync ruff check $files
   else
-    echo "[code-rules] Skip Ruff: .venv/bin/ruff not found."
+    echo "[code-rules] Skip Ruff: uv or .venv not found."
   fi
 
-  if [ -x .venv/bin/python ]; then
+  if command -v uv >/dev/null 2>&1 && [ -d .venv ]; then
     echo "[code-rules] Checking Django settings..."
     export PYTHONPATH="$ROOT_DIR/apps"
     export MAXKB_CONFIG="${MAXKB_CONFIG:-ENV}"
@@ -91,9 +91,9 @@ run_python_checks() {
     export GLOBAL_REDIS_HOST="${GLOBAL_REDIS_HOST:-127.0.0.1}"
     export GLOBAL_REDIS_PORT="${GLOBAL_REDIS_PORT:-6380}"
     export GLOBAL_REDIS_PASSWORD="${GLOBAL_REDIS_PASSWORD:-Password123@redis}"
-    .venv/bin/python apps/manage.py check
+    uv run --no-sync python apps/manage.py check
   else
-    echo "[code-rules] Skip Django check: .venv/bin/python not found."
+    echo "[code-rules] Skip Django check: uv or .venv not found."
   fi
 }
 

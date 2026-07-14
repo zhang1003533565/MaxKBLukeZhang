@@ -145,16 +145,14 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -d "$ROOT_DIR/.venv" ]; then
-  log "Creating Python virtual environment..."
-  uv venv "$ROOT_DIR/.venv" --python 3.11
+if [ "${MAXKB_DEV_SKIP_PY_DEPS:-false}" != "true" ]; then
+  log "Syncing Python dependencies with uv..."
+  uv sync --python 3.11
 fi
 
-source "$ROOT_DIR/.venv/bin/activate"
-
-if [ "${MAXKB_DEV_SKIP_PY_DEPS:-false}" != "true" ]; then
-  log "Checking Python dependencies..."
-  uv pip install -r pyproject.toml
+UV_RUN_ARGS=(run)
+if [ "${MAXKB_DEV_SKIP_PY_DEPS:-false}" = "true" ]; then
+  UV_RUN_ARGS+=(--no-sync)
 fi
 
 if [ ! -f "$UI_DIR/env/.env" ]; then
@@ -168,9 +166,9 @@ fi
 
 if [ "${MAXKB_DEV_SKIP_PREP:-false}" != "true" ]; then
   log "Preparing backend static files..."
-  python main.py collect_static
+  uv "${UV_RUN_ARGS[@]}" python main.py collect_static
   log "Applying database migrations..."
-  python main.py upgrade_db
+  uv "${UV_RUN_ARGS[@]}" python main.py upgrade_db
 fi
 
 export MAXKB_SKIP_DEV_PREP=true
@@ -178,8 +176,8 @@ export MAXKB_SKIP_DEV_PREP=true
 trap cleanup INT TERM EXIT
 
 log "Starting backend, celery, and frontend..."
-start_process backend python main.py dev web
-start_process celery python main.py dev celery
+start_process backend uv "${UV_RUN_ARGS[@]}" python main.py dev web
+start_process celery uv "${UV_RUN_ARGS[@]}" python main.py dev celery
 start_process frontend bash -lc 'cd ui && npm run dev'
 
 log "Ready:"

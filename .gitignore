@@ -183,7 +183,6 @@ apps/xpack
 data
 .dev
 poetry.lock
-uv.lock
 apps/models_provider/impl/*/icon/
 !apps/models_provider/impl/aliyun_bai_lian_model_provider/icon/
 !apps/models_provider/impl/aliyun_bai_lian_model_provider/icon/**
