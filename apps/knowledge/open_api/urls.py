@@ -8,6 +8,7 @@ urlpatterns = [
     path("docs/schema", views.KnowledgeOpenAPIDocsView.as_view()),
     path("docs/content", views.KnowledgeOpenAPIDocsContentView.as_view()),
     path("docs/download", views.KnowledgeOpenAPIDocsDownloadView.as_view()),
+    path("workspaces/<str:workspace_id>/models", views.KnowledgeOpenAPIModelView.as_view()),
     path("workspaces/<str:workspace_id>/knowledges", views.KnowledgeOpenAPIKnowledgeView.as_view()),
     path(
         "workspaces/<str:workspace_id>/knowledges/<str:knowledge_id>",

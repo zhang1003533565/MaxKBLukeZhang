@@ -38,6 +38,7 @@ from knowledge.task.split_preview import (
     split_document_preview_task,
 )
 from maxkb.conf import PROJECT_DIR
+from models_provider.serializers.model_serializer import ModelSerializer
 
 
 def _page(request: Request):
@@ -88,10 +89,19 @@ def _uploaded_file_fingerprint(uploaded_file):
 KNOWLEDGE_OPEN_API_DOC_PATH = (
     Path(PROJECT_DIR) / "docs" / "openapi" / "knowledge-document-upload.md"
 )
+OPEN_API_MODEL_TYPES = {"LLM", "IMAGE"}
+OPEN_API_MODEL_FIELDS = ("id", "name", "model_name", "model_type", "provider")
 
 
 def _read_open_api_document():
     return KNOWLEDGE_OPEN_API_DOC_PATH.read_text(encoding="utf-8")
+
+
+def _open_api_model(model, scope):
+    return {
+        **{field: model.get(field) for field in OPEN_API_MODEL_FIELDS},
+        "scope": scope,
+    }
 
 
 class PublicAPIView(APIView):
@@ -134,6 +144,19 @@ class KnowledgeOpenAPIDocsView(PublicAPIView):
             {
                 "auth": "Authorization: Bearer <api_key>",
                 "endpoints": [
+                    {
+                        "method": "GET",
+                        "path": "/openapi/knowledge/v1/workspaces/{workspace_id}/models",
+                        "description": "获取当前 API Key 可访问的工作区模型与共享模型。",
+                        "query_params": [
+                            {
+                                "name": "model_type",
+                                "type": "string",
+                                "required": True,
+                                "enum": ["LLM", "IMAGE"],
+                            }
+                        ],
+                    },
                     {
                         "method": "GET",
                         "path": "/openapi/knowledge/v1/workspaces/{workspace_id}/knowledges",
@@ -214,6 +237,23 @@ class KnowledgeOpenAPIDocsView(PublicAPIView):
                 ],
             }
         )
+
+
+class KnowledgeOpenAPIModelView(APIView):
+    def get(self, request: Request, workspace_id: str):
+        identity = authenticate_open_api_key(request)
+        model_type = (request.query_params.get("model_type") or "").upper()
+        if model_type not in OPEN_API_MODEL_TYPES:
+            raise AppApiException(400, _("model_type must be LLM or IMAGE"))
+        check_workspace(identity, workspace_id)
+        payload = ModelSerializer.Query(
+            data={"user_id": str(identity.user.id), "model_type": model_type}
+        ).model_list(workspace_id=workspace_id, with_valid=True)
+        models = [
+            *[_open_api_model(model, "workspace") for model in payload.get("model", [])],
+            *[_open_api_model(model, "shared") for model in payload.get("shared_model", [])],
+        ]
+        return result.success(models)
 
 
 class KnowledgeOpenAPIKnowledgeView(APIView):

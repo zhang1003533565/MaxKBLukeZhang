@@ -12,6 +12,51 @@
 
 请勿把 API Key 写入浏览器前端代码或公开仓库。
 
+## 0. 获取可用模型
+
+上传接口需要使用真实模型 UUID 时，可先查询当前工作区可见的工作区模型和共享模型。
+
+```bash
+curl 'https://你的域名/openapi/knowledge/v1/workspaces/{workspace_id}/models?model_type=LLM' \
+  -H 'Authorization: Bearer mkb_your_api_key'
+```
+
+`model_type` 只支持 `LLM` 和 `IMAGE`。响应中的每个对象只返回：
+
+- `id`
+- `name`
+- `model_name`
+- `model_type`
+- `provider`
+- `scope`，其中 `workspace` 表示工作区模型，`shared` 表示共享模型
+
+响应示例：
+
+```json
+{
+  "code": 200,
+  "message": "Success",
+  "data": [
+    {
+      "id": "llm-1",
+      "name": "通义千问",
+      "model_name": "qwen-plus",
+      "model_type": "LLM",
+      "provider": "Qwen",
+      "scope": "workspace"
+    },
+    {
+      "id": "llm-2",
+      "name": "共享模型",
+      "model_name": "shared-chat",
+      "model_type": "LLM",
+      "provider": "OpenAI",
+      "scope": "shared"
+    }
+  ]
+}
+```
+
 ## 1. 创建异步上传任务
 
 ```bash

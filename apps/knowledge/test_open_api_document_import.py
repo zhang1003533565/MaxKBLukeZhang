@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -173,3 +174,53 @@ class KnowledgeOpenAPIDocumentTest(SimpleTestCase):
         self.assertEqual(response["status"], "PREVIEW_READY")
         self.assertNotIn("result", response)
         self.assertNotIn("request_digest", response)
+
+    @patch("knowledge.open_api.views.check_workspace")
+    @patch("knowledge.open_api.views.authenticate_open_api_key")
+    @patch("knowledge.open_api.views.ModelSerializer.Query.model_list")
+    def test_model_list_returns_safe_workspace_and_shared_models(
+        self, model_list, authenticate, check_workspace
+    ):
+        from knowledge.open_api.views import KnowledgeOpenAPIModelView
+        from rest_framework.request import Request
+
+        authenticate.return_value = SimpleNamespace(user=SimpleNamespace(id="user-1"))
+        model_list.return_value = {
+            "model": [{
+                "id": "llm-1", "name": "通义千问", "model_name": "qwen-plus",
+                "model_type": "LLM", "provider": "Qwen", "credential": {"api_key": "secret"}
+            }],
+            "shared_model": [{
+                "id": "llm-2", "name": "共享模型", "model_name": "shared-chat",
+                "model_type": "LLM", "provider": "OpenAI", "model_params_form": ["secret"]
+            }],
+        }
+        request = Request(RequestFactory().get(
+            "/openapi/knowledge/v1/workspaces/default/models", {"model_type": "LLM"}
+        ))
+
+        response = KnowledgeOpenAPIModelView().get(request, workspace_id="default")
+        payload = json.loads(response.content)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["data"][0]["scope"], "workspace")
+        self.assertEqual(payload["data"][1]["scope"], "shared")
+        self.assertNotIn("credential", payload["data"][0])
+        self.assertNotIn("model_params_form", payload["data"][1])
+        check_workspace.assert_called_once_with(authenticate.return_value, "default")
+        model_list.assert_called_once()
+
+    @patch("knowledge.open_api.views.authenticate_open_api_key")
+    def test_model_list_rejects_unsupported_model_type(self, authenticate):
+        from knowledge.open_api.views import KnowledgeOpenAPIModelView
+        from rest_framework.request import Request
+
+        authenticate.return_value = SimpleNamespace(user=SimpleNamespace(id="user-1"))
+        request = Request(RequestFactory().get(
+            "/openapi/knowledge/v1/workspaces/default/models", {"model_type": "EMBEDDING"}
+        ))
+
+        with self.assertRaises(AppApiException) as error:
+            KnowledgeOpenAPIModelView().get(request, workspace_id="default")
+
+        self.assertEqual(error.exception.code, 400)
