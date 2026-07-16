@@ -175,6 +175,47 @@ class KnowledgeOpenAPIDocumentTest(SimpleTestCase):
         self.assertNotIn("result", response)
         self.assertNotIn("request_digest", response)
 
+    @patch("knowledge.open_api.views.create_import_task_state")
+    @patch("knowledge.open_api.views.DocumentSerializers.Split._validate_model_selection")
+    @patch("knowledge.open_api.views.check_knowledge_permission")
+    @patch("knowledge.open_api.views.authenticate_open_api_key")
+    def test_upload_task_id_uses_uuid7_compatibility_layer(
+        self, authenticate, check_knowledge_permission, validate_model_selection, create_import_task_state
+    ):
+        from knowledge.open_api.views import KnowledgeOpenAPIUploadDocumentView
+
+        class RequestValues(dict):
+            def getlist(self, key):
+                value = self.get(key)
+                if value is None:
+                    return []
+                return value if isinstance(value, list) else [value]
+
+        authenticate.return_value = SimpleNamespace(
+            key={"id": "key-1"}, user=SimpleNamespace(id="user-1")
+        )
+        create_import_task_state.return_value = (
+            {"task_id": "existing-task", "status": "queued", "stage": "queued"},
+            False,
+        )
+        path = "/openapi/knowledge/v1/workspaces/default/knowledges/knowledge-1/documents/upload"
+        request = SimpleNamespace(
+            FILES=RequestValues(),
+            data=RequestValues({"file_id": "file-1", "idempotency_key": "request-1"}),
+            headers={},
+            path=path,
+            build_absolute_uri=lambda request_path: f"http://testserver{request_path}",
+        )
+
+        response = KnowledgeOpenAPIUploadDocumentView().post(
+            request, workspace_id="default", knowledge_id="knowledge-1"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        create_import_task_state.assert_called_once()
+        generated_task_id = create_import_task_state.call_args.args[0]
+        self.assertNotEqual(generated_task_id, "existing-task")
+
     @patch("knowledge.open_api.views.check_workspace")
     @patch("knowledge.open_api.views.authenticate_open_api_key")
     @patch("knowledge.open_api.views.ModelSerializer.Query.model_list")

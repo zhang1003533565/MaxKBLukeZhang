@@ -1,9 +1,9 @@
 # coding=utf-8
 import hashlib
 import json
-import uuid
 from pathlib import Path
 
+import uuid_utils.compat as uuid
 from django.http import HttpResponse
 from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
