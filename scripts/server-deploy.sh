@@ -14,17 +14,20 @@ log() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/server-deploy.sh [--local|--pull|--restart|--status]
+  ./scripts/server-deploy.sh [--local|--pull|--restart|--status|--cleanup]
 
 Modes:
   --local    Build image from the current server source, then start services.
   --pull     Pull LIUGUANG_KB_IMAGE from registry, then start services.
   --restart  Restart existing services.
   --status   Show service status.
+  --cleanup  Prune unused Docker images and build cache. Volumes are never pruned.
 
 Environment:
-  LIUGUANG_KB_ENV_FILE  Override deploy env file path. Default: deploy/.env
-  DEPLOY_MODE       local | pull | restart | status
+  LIUGUANG_KB_ENV_FILE             Override deploy env file path. Default: deploy/.env
+  LIUGUANG_KB_AUTO_CLEANUP         true | false. Default: true
+  LIUGUANG_KB_DOCKER_PRUNE_UNTIL   Docker prune age filter. Default: 24h
+  DEPLOY_MODE                      local | pull | restart | status | cleanup
 EOF
 }
 
@@ -65,6 +68,26 @@ require_command() {
   fi
 }
 
+cleanup_docker_resources() {
+  local prune_until="${LIUGUANG_KB_DOCKER_PRUNE_UNTIL:-24h}"
+
+  log "Pruning unused Docker images older than ${prune_until}..."
+  docker image prune -af --filter "until=${prune_until}"
+  log "Pruning unused Docker build cache older than ${prune_until}..."
+  docker builder prune -af --filter "until=${prune_until}"
+}
+
+cleanup_after_deploy() {
+  case "${LIUGUANG_KB_AUTO_CLEANUP:-true}" in
+    true | TRUE | 1 | yes | YES | on | ON)
+      cleanup_docker_resources
+      ;;
+    *)
+      log "Skipping Docker cleanup because LIUGUANG_KB_AUTO_CLEANUP=${LIUGUANG_KB_AUTO_CLEANUP}."
+      ;;
+  esac
+}
+
 case "${1:-}" in
   --local)
     DEPLOY_MODE=local
@@ -77,6 +100,9 @@ case "${1:-}" in
     ;;
   --status)
     DEPLOY_MODE=status
+    ;;
+  --cleanup)
+    DEPLOY_MODE=cleanup
     ;;
   -h | --help)
     usage
@@ -91,6 +117,11 @@ case "${1:-}" in
 esac
 
 require_command docker
+
+if [ "$DEPLOY_MODE" = "cleanup" ]; then
+  cleanup_docker_resources
+  exit 0
+fi
 
 mkdir -p "$(dirname "$ENV_FILE")"
 if [ ! -f "$ENV_FILE" ]; then
@@ -126,12 +157,14 @@ case "$DEPLOY_MODE" in
     "${COMPOSE[@]}" build app
     log "Starting services..."
     "${COMPOSE[@]}" up -d --remove-orphans
+    cleanup_after_deploy
     ;;
   pull)
     log "Pulling image ${LIUGUANG_KB_IMAGE:-ghcr.io/zhang1003533565/liuguang-kb:latest}..."
     "${COMPOSE[@]}" pull app
     log "Starting services..."
     "${COMPOSE[@]}" up -d --remove-orphans
+    cleanup_after_deploy
     ;;
   restart)
     log "Restarting services..."
@@ -139,6 +172,10 @@ case "$DEPLOY_MODE" in
     ;;
   status)
     "${COMPOSE[@]}" ps
+    exit 0
+    ;;
+  cleanup)
+    cleanup_docker_resources
     exit 0
     ;;
   *)
