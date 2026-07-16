@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from common import result
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed
 from common.utils.common import query_params_to_single_dict
-from knowledge.models import Document, File, FileSourceType, KnowledgeScope
+from knowledge.models import Document, File, FileSourceType, KnowledgeScope, Paragraph
 from knowledge.open_api.auth import (
     authenticate_open_api_key,
     check_knowledge_permission,
@@ -228,6 +228,16 @@ class KnowledgeOpenAPIDocsView(PublicAPIView):
                         "method": "GET",
                         "path": "/openapi/knowledge/v1/workspaces/{workspace_id}/knowledges/{knowledge_id}/documents/{document_id}/paragraphs",
                         "description": "分页获取文档分段",
+                    },
+                    {
+                        "method": "PUT",
+                        "path": "/openapi/knowledge/v1/workspaces/{workspace_id}/knowledges/{knowledge_id}/documents/{document_id}/paragraphs/{paragraph_id}",
+                        "description": "编辑文档分段内容、标题、启用状态和关联问题",
+                    },
+                    {
+                        "method": "GET",
+                        "path": "/openapi/knowledge/v1/workspaces/{workspace_id}/knowledges/{knowledge_id}/documents/{document_id}/paragraphs/{paragraph_id}/problem",
+                        "description": "获取文档分段关联问题",
                     },
                     {
                         "method": "POST",
@@ -575,12 +585,28 @@ class KnowledgeOpenAPIUploadTaskCancelView(APIView):
         )
 
 
+def _check_open_api_paragraph_permission(
+    identity,
+    workspace_id: str,
+    knowledge_id: str,
+    document_id: str,
+    paragraph_id: str | None = None,
+):
+    check_knowledge_permission(identity, workspace_id, knowledge_id)
+    if not QuerySet(Document).filter(id=document_id, knowledge_id=knowledge_id).exists():
+        raise AppUnauthorizedFailed(403, _("No permission to access"))
+    if paragraph_id and not QuerySet(Paragraph).filter(
+        id=paragraph_id,
+        document_id=document_id,
+        knowledge_id=knowledge_id,
+    ).exists():
+        raise AppUnauthorizedFailed(403, _("No permission to access"))
+
+
 class KnowledgeOpenAPIParagraphView(APIView):
     def get(self, request: Request, workspace_id: str, knowledge_id: str, document_id: str):
         identity = authenticate_open_api_key(request)
-        check_knowledge_permission(identity, workspace_id, knowledge_id)
-        if not QuerySet(Document).filter(id=document_id, knowledge_id=knowledge_id).exists():
-            raise AppUnauthorizedFailed(403, _("No permission to access"))
+        _check_open_api_paragraph_permission(identity, workspace_id, knowledge_id, document_id)
         return result.success(
             ParagraphSerializers.Query(
                 data={
@@ -590,6 +616,38 @@ class KnowledgeOpenAPIParagraphView(APIView):
                     "document_id": document_id,
                 }
             ).page(_page(request), _page_size(request))
+        )
+
+
+class KnowledgeOpenAPIParagraphDetailView(APIView):
+    def put(self, request: Request, workspace_id: str, knowledge_id: str, document_id: str, paragraph_id: str):
+        identity = authenticate_open_api_key(request)
+        _check_open_api_paragraph_permission(identity, workspace_id, knowledge_id, document_id, paragraph_id)
+        operator = ParagraphSerializers.Operate(
+            data={
+                "workspace_id": workspace_id,
+                "knowledge_id": knowledge_id,
+                "document_id": document_id,
+                "paragraph_id": paragraph_id,
+            }
+        )
+        operator.is_valid(raise_exception=True)
+        return result.success(operator.edit(request.data))
+
+
+class KnowledgeOpenAPIParagraphProblemView(APIView):
+    def get(self, request: Request, workspace_id: str, knowledge_id: str, document_id: str, paragraph_id: str):
+        identity = authenticate_open_api_key(request)
+        _check_open_api_paragraph_permission(identity, workspace_id, knowledge_id, document_id, paragraph_id)
+        return result.success(
+            ParagraphSerializers.Problem(
+                data={
+                    "workspace_id": workspace_id,
+                    "knowledge_id": knowledge_id,
+                    "document_id": document_id,
+                    "paragraph_id": paragraph_id,
+                }
+            ).list(with_valid=True)
         )
 
 

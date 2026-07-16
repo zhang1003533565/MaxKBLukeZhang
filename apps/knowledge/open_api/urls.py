@@ -46,5 +46,17 @@ urlpatterns = [
         "workspaces/<str:workspace_id>/knowledges/<str:knowledge_id>/documents/<str:document_id>/paragraphs",
         views.KnowledgeOpenAPIParagraphView.as_view(),
     ),
+    path(
+        "workspaces/<str:workspace_id>/knowledges/<str:knowledge_id>/documents/<str:document_id>/paragraphs/<str:paragraph_id>",
+        views.KnowledgeOpenAPIParagraphDetailView.as_view(),
+    ),
+    path(
+        "workspaces/<str:workspace_id>/knowledges/<str:knowledge_id>/documents/<str:document_id>/paragraphs/<str:paragraph_id>/problem",
+        views.KnowledgeOpenAPIParagraphProblemView.as_view(),
+    ),
+    path(
+        "workspaces/<str:workspace_id>/knowledges/<str:knowledge_id>/documents/<str:document_id>/paragraphs/<str:paragraph_id>/problems",
+        views.KnowledgeOpenAPIParagraphProblemView.as_view(),
+    ),
     path("workspaces/<str:workspace_id>/hit-test", views.KnowledgeOpenAPIHitTestView.as_view()),
 ]
