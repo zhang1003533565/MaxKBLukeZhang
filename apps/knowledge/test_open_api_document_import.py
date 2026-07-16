@@ -208,14 +208,19 @@ class KnowledgeOpenAPIDocumentTest(SimpleTestCase):
         self.assertNotIn("credential", payload["data"][0])
         self.assertNotIn("model_params_form", payload["data"][1])
         check_workspace.assert_called_once_with(authenticate.return_value, "default")
-        model_list.assert_called_once()
+        model_list.assert_called_once_with(workspace_id="default", with_valid=True)
 
+    @patch("knowledge.open_api.views.check_workspace")
     @patch("knowledge.open_api.views.authenticate_open_api_key")
-    def test_model_list_rejects_unsupported_model_type(self, authenticate):
+    def test_model_list_rejects_unsupported_model_type_after_workspace_check(
+        self, authenticate, check_workspace
+    ):
         from knowledge.open_api.views import KnowledgeOpenAPIModelView
         from rest_framework.request import Request
 
-        authenticate.return_value = SimpleNamespace(user=SimpleNamespace(id="user-1"))
+        authenticate.return_value = SimpleNamespace(
+            key={"workspace_id": "default"}, user=SimpleNamespace(id="user-1")
+        )
         request = Request(RequestFactory().get(
             "/openapi/knowledge/v1/workspaces/default/models", {"model_type": "EMBEDDING"}
         ))
@@ -223,4 +228,28 @@ class KnowledgeOpenAPIDocumentTest(SimpleTestCase):
         with self.assertRaises(AppApiException) as error:
             KnowledgeOpenAPIModelView().get(request, workspace_id="default")
 
+        check_workspace.assert_called_once_with(authenticate.return_value, "default")
         self.assertEqual(error.exception.code, 400)
+
+    @patch("knowledge.open_api.views.check_workspace")
+    @patch("knowledge.open_api.views.authenticate_open_api_key")
+    def test_model_list_rejects_wrong_workspace_before_model_type_validation(
+        self, authenticate, check_workspace
+    ):
+        from common.exception.app_exception import AppUnauthorizedFailed
+        from knowledge.open_api.views import KnowledgeOpenAPIModelView
+        from rest_framework.request import Request
+
+        authenticate.return_value = SimpleNamespace(
+            key={"workspace_id": "workspace-a"}, user=SimpleNamespace(id="user-1")
+        )
+        check_workspace.side_effect = AppUnauthorizedFailed(403, "No permission to access")
+        request = Request(RequestFactory().get(
+            "/openapi/knowledge/v1/workspaces/workspace-b/models", {"model_type": "EMBEDDING"}
+        ))
+
+        with self.assertRaises(AppUnauthorizedFailed) as error:
+            KnowledgeOpenAPIModelView().get(request, workspace_id="workspace-b")
+
+        check_workspace.assert_called_once_with(authenticate.return_value, "workspace-b")
+        self.assertEqual(error.exception.code, 403)

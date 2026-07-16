@@ -242,10 +242,10 @@ class KnowledgeOpenAPIDocsView(PublicAPIView):
 class KnowledgeOpenAPIModelView(APIView):
     def get(self, request: Request, workspace_id: str):
         identity = authenticate_open_api_key(request)
+        check_workspace(identity, workspace_id)
         model_type = (request.query_params.get("model_type") or "").upper()
         if model_type not in OPEN_API_MODEL_TYPES:
             raise AppApiException(400, _("model_type must be LLM or IMAGE"))
-        check_workspace(identity, workspace_id)
         payload = ModelSerializer.Query(
             data={"user_id": str(identity.user.id), "model_type": model_type}
         ).model_list(workspace_id=workspace_id, with_valid=True)
