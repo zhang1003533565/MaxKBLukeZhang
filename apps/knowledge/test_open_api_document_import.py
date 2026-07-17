@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -218,6 +219,12 @@ class KnowledgeOpenAPIDocumentTest(SimpleTestCase):
         self.assertEqual(response["status"], "PREVIEW_READY")
         self.assertNotIn("result", response)
         self.assertNotIn("request_digest", response)
+
+    def test_paragraph_edit_uses_problem_mapping_table(self):
+        source = Path("apps/knowledge/serializers/paragraph.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("QuerySet(Problem).filter(paragraph_id=", source)
+        self.assertNotIn("Problem(\n                            id=uuid.uuid7(),\n                            content=p.get(\"content\"),\n                            paragraph_id=", source)
 
     @patch("knowledge.open_api.views.create_import_task_state")
     @patch("knowledge.open_api.views.DocumentSerializers.Split._validate_model_selection")

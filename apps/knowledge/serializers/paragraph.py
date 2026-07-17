@@ -238,8 +238,14 @@ class ParagraphSerializers(serializers.Serializer):
 
                 create_problem_list = list(filter(lambda row: row.get("id") is None, instance.get("problem_list")))
 
-                # 问题集合
-                problem_list = QuerySet(Problem).filter(paragraph_id=self.data.get("paragraph_id"))
+                problem_paragraph_mapping = QuerySet(ProblemParagraphMapping).filter(
+                    knowledge_id=self.data.get("knowledge_id"),
+                    document_id=self.data.get("document_id"),
+                    paragraph_id=self.data.get("paragraph_id"),
+                )
+                problem_list = QuerySet(Problem).filter(
+                    id__in=[mapping.problem_id for mapping in problem_paragraph_mapping]
+                )
 
                 # 校验前端 携带过来的id
                 for update_problem in update_problem_list:
@@ -260,23 +266,43 @@ class ParagraphSerializers(serializers.Serializer):
                     if len(update_problem_list) > 0
                     else []
                 )
-                # 删除问题
-                QuerySet(Problem).filter(id__in=[row.id for row in delete_problem_list]).delete() if len(
-                    delete_problem_list
-                ) > 0 else None
+                delete_problem_ids = [row.id for row in delete_problem_list]
+                if delete_problem_ids:
+                    QuerySet(ProblemParagraphMapping).filter(
+                        knowledge_id=self.data.get("knowledge_id"),
+                        document_id=self.data.get("document_id"),
+                        paragraph_id=self.data.get("paragraph_id"),
+                        problem_id__in=delete_problem_ids,
+                    ).delete()
+                    remaining_problem_counts = (
+                        ProblemParagraphMapping.objects.filter(problem_id__in=delete_problem_ids)
+                        .values("problem_id")
+                        .annotate(count=Count("problem_id"))
+                    )
+                    remaining_problem_ids = {row["problem_id"] for row in remaining_problem_counts}
+                    Problem.objects.filter(id__in=set(delete_problem_ids) - remaining_problem_ids).delete()
                 # 插入新的问题
-                QuerySet(Problem).bulk_create(
+                new_problems = [
+                    Problem(
+                        id=uuid.uuid7(),
+                        content=p.get("content"),
+                        knowledge_id=self.data.get("knowledge_id"),
+                    )
+                    for p in create_problem_list
+                ]
+                QuerySet(Problem).bulk_create(new_problems) if len(new_problems) else None
+                QuerySet(ProblemParagraphMapping).bulk_create(
                     [
-                        Problem(
+                        ProblemParagraphMapping(
                             id=uuid.uuid7(),
-                            content=p.get("content"),
+                            problem_id=problem.id,
                             paragraph_id=self.data.get("paragraph_id"),
                             knowledge_id=self.data.get("knowledge_id"),
                             document_id=self.data.get("document_id"),
                         )
-                        for p in create_problem_list
+                        for problem in new_problems
                     ]
-                ) if len(create_problem_list) else None
+                ) if len(new_problems) else None
 
                 # 修改问题集合
                 QuerySet(Problem).bulk_update(
@@ -579,7 +605,7 @@ class ParagraphSerializers(serializers.Serializer):
                 generate_related_by_paragraph_id_list.delay(
                     document_id, paragraph_id_list, model_id, model_params_setting, prompt
                 )
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("The task is being executed, please do not send it again."))
 
     class Migrate(serializers.Serializer):
