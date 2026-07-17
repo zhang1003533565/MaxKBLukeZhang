@@ -86,7 +86,7 @@ jobs:
           script: |
             set -euo pipefail
             DEPLOY_PATH="${{ vars.SERVER_DEPLOY_PATH || '/opt/liuguang-kb' }}"
-            REPO_URL="https://github.com/${{ github.repository }}.git"
+            REPO_URL="git@github.com:${{ github.repository }}.git"
 
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
               mkdir -p "$(dirname "$DEPLOY_PATH")"
