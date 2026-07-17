@@ -192,7 +192,7 @@ def _apply_import_task_locked(task_id):
 
     from knowledge.serializers.document import DocumentSerializers
 
-    preview_result = deepcopy(state.get("result"))
+    preview_result = _normalize_preview_result_for_batch_save(deepcopy(state.get("result")))
     for document in preview_result:
         document["meta"] = {
             **(document.get("meta") or {}),
@@ -263,6 +263,78 @@ def _apply_import_task_locked(task_id):
             error="文档创建失败，请稍后重试",
         )
         raise
+
+
+def _normalize_preview_result_for_batch_save(preview_result):
+    normalized_documents = []
+    for document in preview_result or []:
+        normalized = dict(document)
+        if "paragraphs" not in normalized and "content" in normalized:
+            normalized["paragraphs"] = _normalize_preview_paragraphs(normalized.get("content"))
+            normalized.pop("content", None)
+        normalized_documents.append(normalized)
+    return normalized_documents
+
+
+def _normalize_preview_paragraphs(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [{"title": "", "content": text}] if text else []
+    if isinstance(value, dict):
+        title = str(value.get("title") or value.get("name") or "").strip()
+        content = _readable_preview_text(
+            value.get("content")
+            or value.get("text")
+            or value.get("paragraph_content")
+            or value.get("raw_content")
+            or value.get("markdown")
+            or value.get("md")
+            or value.get("html")
+        )
+        if not content and (value.get("children") or value.get("paragraphs")):
+            return _normalize_preview_paragraphs(value.get("children") or value.get("paragraphs"))
+        return [{"title": title, "content": content}] if content else []
+    if isinstance(value, list):
+        paragraphs = []
+        for item in value:
+            paragraphs.extend(_normalize_preview_paragraphs(item))
+        return paragraphs
+    text = str(value).strip()
+    return [{"title": "", "content": text}] if text else []
+
+
+def _readable_preview_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        return "\n".join(filter(None, (_readable_preview_text(item) for item in value)))
+    if isinstance(value, dict):
+        preferred_keys = [
+            "content",
+            "text",
+            "paragraph_content",
+            "raw_content",
+            "markdown",
+            "md",
+            "html",
+            "title",
+            "name",
+            "children",
+            "paragraphs",
+        ]
+        preferred = "\n".join(
+            filter(None, (_readable_preview_text(value.get(key)) for key in preferred_keys))
+        )
+        if preferred:
+            return preferred
+        return "\n".join(filter(None, (_readable_preview_text(item) for item in value.values())))
+    return str(value).strip()
 
 
 def _finalize_import_files(task_id, preview_result):

@@ -127,6 +127,50 @@ class KnowledgeOpenAPIImportTaskTest(SimpleTestCase):
         batch_save.assert_called_once()
         finalize_import_files.assert_called_once()
 
+    @patch("knowledge.open_api.document_import_task._finalize_import_files")
+    @patch("knowledge.serializers.document.DocumentSerializers.Batch.batch_save")
+    def test_apply_converts_preview_content_to_persisted_paragraphs(
+        self, batch_save, finalize_import_files
+    ):
+        from knowledge.open_api.document_import_task import (
+            apply_import_task,
+            create_import_task_state,
+            update_import_task_state,
+        )
+
+        batch_save.return_value = [{
+            "id": "document-1",
+            "name": "manual.pdf",
+            "char_length": 8,
+            "paragraph_count": 2,
+        }]
+        create_import_task_state(
+            "task-1", self.identity, "workspace-1", "knowledge-1", "digest-1"
+        )
+        update_import_task_state(
+            "task-1",
+            status="completed",
+            stage="completed",
+            result=[{
+                "name": "manual.pdf",
+                "source_file_id": "file-1",
+                "content": [
+                    {"title": "第一段", "content": "正文一"},
+                    {"title": "第二段", "content": "正文二"},
+                ],
+            }],
+        )
+
+        result = apply_import_task("task-1")
+
+        saved_documents = batch_save.call_args.args[0]
+        self.assertEqual(saved_documents[0]["paragraphs"], [
+            {"title": "第一段", "content": "正文一"},
+            {"title": "第二段", "content": "正文二"},
+        ])
+        self.assertNotIn("content", saved_documents[0])
+        self.assertEqual(result["documents"][0]["paragraph_count"], 2)
+
     def test_apply_lock_rejects_concurrent_apply(self):
         from knowledge.open_api.document_import_task import (
             IMPORT_TASK_APPLY_LOCK_PREFIX,
