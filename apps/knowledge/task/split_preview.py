@@ -64,6 +64,48 @@ def calculate_split_progress(stage, processed=0, total=0):
     return 0
 
 
+def _to_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _iter_exception_chain(error):
+    seen = set()
+    current = error
+    while current and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+
+
+def _split_preview_error_message(error):
+    error_text = "\n".join(
+        f"{item.__class__.__name__}: {item}" for item in _iter_exception_chain(error)
+    )
+    if any(
+        marker in error_text
+        for marker in (
+            "APIConnectionError",
+            "ConnectError",
+            "Connection refused",
+            "Connection error",
+            "WinError 10061",
+            "actively refused",
+        )
+    ):
+        return "模型服务连接失败，请检查模型 API 地址、网络或代理配置"
+    if "QA model result is not valid JSON" in error_text or "QA model result is invalid" in error_text:
+        return "模型返回格式不是 QA JSON，请重新生成预览或更换模型"
+    if "QA model result is empty" in error_text:
+        return "模型未生成有效问答，请检查文档内容或更换模型"
+    if "No standard QA pairs detected" in error_text:
+        return "未检测到标准 QA 问答，请选择自动推荐或大模型解析"
+    return "处理失败，请检查模型配置或稍后重试"
+
+
 def create_split_task_state(task_id, user_id, workspace_id, knowledge_id):
     state = {
         "task_id": str(task_id),
@@ -211,12 +253,13 @@ def split_document_preview_task(
         cumulative_total = active_base + total
         stage_occurrences[stage] = max(stage_occurrences.get(stage, 0), cumulative_total)
 
-        quality_enabled = bool(split_config.get("quality_optimize"))
+        quality_enabled = _to_bool(split_config.get("quality_optimize"))
         stage_weights = (
             {
                 "filtering": (0.05, 0.1),
                 "vision": (0.15, 0.53),
                 "splitting": (0.68, 0.14),
+                "qa_generating": (0.8, 0.19),
                 "quality_cleaning": (0.83, 0.02),
                 "quality_analyzing": (0.85, 0.02),
                 "quality_optimizing": (0.87, 0.11),
@@ -227,6 +270,7 @@ def split_document_preview_task(
                 "filtering": (0.05, 0.1),
                 "vision": (0.15, 0.65),
                 "splitting": (0.8, 0.19),
+                "qa_generating": (0.8, 0.19),
             }
         )
         stage_start, stage_weight = stage_weights.get(stage, (0.0, 0.0))
@@ -288,10 +332,11 @@ def split_document_preview_task(
             "file": uploaded_files,
             "limit": split_config.get("limit", 4096),
             "split_strategy": split_config.get("split_strategy") or "",
+            "qa_parse_mode": split_config.get("qa_parse_mode") or "",
             "model_id": split_config.get("model_id"),
             "vision_model_id": split_config.get("vision_model_id"),
             "llm_model_id": split_config.get("llm_model_id"),
-            "quality_optimize": split_config.get("quality_optimize", False),
+            "quality_optimize": _to_bool(split_config.get("quality_optimize")),
         }
         if split_config.get("patterns") is not None:
             parse_data["patterns"] = split_config.get("patterns")
@@ -349,7 +394,7 @@ def split_document_preview_task(
             status="failed",
             stage="failed",
             message="分段预览生成失败",
-            error="处理失败，请检查模型配置或稍后重试",
+            error=_split_preview_error_message(e),
             result=None,
         )
     finally:

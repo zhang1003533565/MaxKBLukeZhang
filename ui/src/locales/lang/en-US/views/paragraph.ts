@@ -16,6 +16,8 @@ export default {
   },
   relatedProblem: {
     title: 'Related Questions',
+    previewTitle: 'Similar Questions',
+    keywordTitle: 'Keywords',
     placeholder: 'Please select a question',
   },
   form: {

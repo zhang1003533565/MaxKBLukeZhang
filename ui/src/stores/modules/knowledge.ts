@@ -36,6 +36,7 @@ export interface DocumentUploadDraft {
     patterns: string[]
     limit: number
     with_filter: boolean
+    qa_parse_mode?: string
     llm_model_id: string
     vision_model_id: string
     quality_optimize?: boolean

@@ -96,6 +96,17 @@ export default {
       label: '高级分段',
       text: '用户可根据文档规范自行设置分段标识符、分段长度以及清洗规则',
     },
+    qa: {
+      label: 'QA 问答分段',
+      text: '自动识别标准问答；普通文档可由文本大模型生成问题、答案、关键词和多种问法',
+      previewUnit: '组问答',
+    },
+    qaParseMode: {
+      label: 'QA 解析方式',
+      auto: '自动推荐',
+      rule: '仅规则解析',
+      llm: '仅大模型解析',
+    },
     llmText: {
       label: '大模型文本分段',
       text: '使用纯文本大模型根据语义重新切分，图片只保留引用',
@@ -107,8 +118,10 @@ export default {
     model: {
       label: '切分模型',
       llmLabel: '文本分段模型',
+      qaLabel: '问答生成模型',
       visionLabel: '图文理解模型',
       llmPlaceholder: '请选择文本大模型',
+      qaPlaceholder: '请选择用于生成问答的文本大模型',
       visionPlaceholder: '请选择图文大模型',
     },
     patterns: {

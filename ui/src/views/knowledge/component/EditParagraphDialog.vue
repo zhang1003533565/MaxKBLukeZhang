@@ -117,6 +117,7 @@ function addProblemHandle() {
     ) {
       detail.value?.problem_list?.push({
         content: problemValue.value.trim(),
+        kind: 'question',
       })
     }
 

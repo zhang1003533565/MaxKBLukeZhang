@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import math
 import os
 import re
 from collections import Counter, defaultdict
@@ -19,6 +20,7 @@ from common.exception.app_exception import AppApiException
 from common.field.common import UploadedFileField
 from common.handle.impl.qa.csv_parse_qa_handle import CsvParseQAHandle
 from common.handle.impl.qa.md_parse_qa_handle import MarkdownParseQAHandle
+from common.handle.impl.qa.text_parse_qa_handle import TextParseQAHandle
 from common.handle.impl.qa.xls_parse_qa_handle import XlsParseQAHandle
 from common.handle.impl.qa.xlsx_parse_qa_handle import XlsxParseQAHandle
 from common.handle.impl.qa.zip_parse_qa_handle import ZipParseQAHandle
@@ -35,7 +37,8 @@ from common.handle.impl.text.xlsx_split_handle import XlsxSplitHandle
 from common.handle.impl.text.zip_split_handle import ZipSplitHandle
 from common.utils.common import bulk_create_in_batches, get_file_content, parse_image, post
 from common.utils.logger import maxkb_logger
-from common.utils.split_model import flat_map, smart_split_paragraph
+from common.utils.query_expansion import expand_query_variants
+from common.utils.split_model import flat_map, get_keyword, smart_split_paragraph
 from django.contrib.postgres.fields import JSONField
 from django.core import validators
 from django.db import models, transaction
@@ -98,6 +101,7 @@ from knowledge.task.embedding import (
     delete_embedding_by_paragraph_ids,
     embedding_by_document,
     embedding_by_document_list,
+    get_embedding_model,
     tokenize_by_document,
     update_embedding_knowledge_id,
 )
@@ -116,7 +120,9 @@ split_handles = [
 ]
 
 md_qa_split_handle = MarkdownParseQAHandle()
+text_qa_split_handle = TextParseQAHandle()
 parse_qa_handle_list = [XlsParseQAHandle(), CsvParseQAHandle(), XlsxParseQAHandle(), ZipParseQAHandle()]
+qa_split_handle_list = [md_qa_split_handle, *parse_qa_handle_list, text_qa_split_handle]
 parse_table_handle_list = [CsvParseTableHandle(), XlsParseTableHandle(), XlsxParseTableHandle()]
 
 
@@ -211,6 +217,7 @@ class DocumentSplitRequest(serializers.Serializer):
     )
     with_filter = serializers.BooleanField(required=False, label=_("Auto Clean"))
     split_strategy = serializers.CharField(required=False, allow_blank=True, label=_("split strategy"))
+    qa_parse_mode = serializers.CharField(required=False, allow_blank=True, default="auto", label=_("QA parse mode"))
     model_id = serializers.UUIDField(required=False, allow_null=True, label=_("model id"))
     vision_model_id = serializers.UUIDField(required=False, allow_null=True, label=_("vision model id"))
     llm_model_id = serializers.UUIDField(required=False, allow_null=True, label=_("LLM model id"))
@@ -1094,10 +1101,58 @@ class DocumentSerializers(serializers.Serializer):
     class Split(serializers.Serializer):
         LLM_TEXT_STRATEGY = "llm_text"
         LLM_VISION_STRATEGY = "llm_vision"
+        QA_STRATEGY = "qa"
+        QA_PARSE_AUTO = "auto"
+        QA_PARSE_RULE = "rule"
+        QA_PARSE_LLM = "llm"
+        QA_PARSE_MODES = {QA_PARSE_AUTO, QA_PARSE_RULE, QA_PARSE_LLM}
         MODEL_SPLIT_STRATEGIES = [LLM_TEXT_STRATEGY, LLM_VISION_STRATEGY]
         MODEL_BATCH_LIMIT = 12000
         MODEL_IMAGE_LIMIT = 4
         VISION_BATCH_MAX_ATTEMPTS = 2
+        QA_RELATED_QUESTION_LIMIT = 10
+        QA_QUESTION_LIST_LIMIT = 12
+        QA_KEYWORD_LIST_LIMIT = 8
+        QA_PROBLEM_LIST_LIMIT = QA_QUESTION_LIST_LIMIT + QA_KEYWORD_LIST_LIMIT
+        QA_QUESTION_SIMILARITY_THRESHOLD = 0.92
+        # 百炼 Embedding 接口单次最多接收 25 条，留出余量避免整批请求失败。
+        QA_EMBEDDING_BATCH_SIZE = 20
+        QA_QUESTION_POLITE_PREFIXES = (
+            "请问",
+            "请教一下",
+            "请教",
+            "想了解一下",
+            "想知道",
+            "麻烦您",
+            "麻烦",
+            "烦请",
+            "劳烦",
+            "请您",
+            "请帮忙",
+            "请帮我",
+            "帮忙",
+            "想请问",
+            "请问一下",
+        )
+        QA_QUESTION_POLITE_SUFFIXES = ("呢", "呀", "啊", "吗", "嘛", "吧", "么")
+        QA_KEYWORD_STOPWORDS = {
+            "什么",
+            "哪些",
+            "怎么",
+            "如何",
+            "是否",
+            "可以",
+            "需要",
+            "应该",
+            "应当",
+            "不得",
+            "不能",
+            "进行",
+            "以及",
+            "或者",
+            "问题",
+            "答案",
+        }
 
         workspace_id = serializers.CharField(required=False, label=_("workspace id"), allow_null=True)
         knowledge_id = serializers.UUIDField(required=True, label=_("knowledge id"))
@@ -1127,12 +1182,20 @@ class DocumentSerializers(serializers.Serializer):
 
             file_list = instance.get("file")
             split_strategy = instance.get("split_strategy") or ""
+            qa_parse_mode = self._normalize_qa_parse_mode(
+                instance.get("qa_parse_mode")
+            )
             model_id = instance.get("model_id")
             vision_model_id = instance.get("vision_model_id")
             llm_model_id = instance.get("llm_model_id")
-            quality_optimize = bool(instance.get("quality_optimize", False))
+            quality_optimize = self._to_boolean(instance.get("quality_optimize", False))
             self._validate_model_selection(
-                split_strategy, model_id, vision_model_id, llm_model_id
+                split_strategy,
+                model_id,
+                vision_model_id,
+                llm_model_id,
+                quality_optimize,
+                qa_parse_mode,
             )
 
             result_list = []
@@ -1149,6 +1212,7 @@ class DocumentSerializers(serializers.Serializer):
                             vision_model_id,
                             llm_model_id,
                             quality_optimize,
+                            qa_parse_mode,
                         )
                     )
                 return result_list
@@ -1307,6 +1371,52 @@ class DocumentSerializers(serializers.Serializer):
                 offset = result_end
             return result
 
+        @staticmethod
+        def _normalize_quality_problem_list(problem_list):
+            result = []
+            seen = set()
+            for problem in problem_list or []:
+                content = problem.get("content") if isinstance(problem, dict) else problem
+                content = str(content or "").strip()
+                if not content or content in seen:
+                    continue
+                seen.add(content)
+                result.append({"content": content[:255]})
+            return result
+
+        @classmethod
+        def _quality_problem_list_for_batch(cls, batch):
+            result = []
+            seen = set()
+            for paragraph in batch:
+                for problem in cls._normalize_quality_problem_list(
+                    paragraph.get("problem_list")
+                ):
+                    content = problem["content"]
+                    if content in seen:
+                        continue
+                    seen.add(content)
+                    result.append(problem)
+            return result
+
+        @classmethod
+        def _restore_quality_problem_lists(cls, accepted, batch):
+            if len(accepted) == len(batch):
+                for item, paragraph in zip(accepted, batch):
+                    problem_list = cls._normalize_quality_problem_list(
+                        paragraph.get("problem_list")
+                    )
+                    if problem_list and not item.get("problem_list"):
+                        item["problem_list"] = problem_list
+                return
+
+            problem_list = cls._quality_problem_list_for_batch(batch)
+            if not problem_list:
+                return
+            for item in accepted:
+                if not item.get("problem_list"):
+                    item["problem_list"] = [dict(problem) for problem in problem_list]
+
         def _quality_optimize_paragraphs(
             self, document_name, paragraphs, enabled, model_id
         ):
@@ -1396,6 +1506,7 @@ class DocumentSerializers(serializers.Serializer):
                             fallback["source_paragraph_ids"] = [str(paragraph["id"])]
                         optimized.append(fallback)
                 else:
+                    self._restore_quality_problem_lists(accepted, batch)
                     source_ids_by_result = self._quality_source_ids(batch, accepted)
                     for accepted_index, item in enumerate(accepted):
                         item["is_active"] = all(
@@ -1430,10 +1541,47 @@ class DocumentSerializers(serializers.Serializer):
             )
             return optimized, report
 
+        @staticmethod
+        def _to_boolean(value):
+            if isinstance(value, bool):
+                return value
+            if value is None:
+                return False
+            return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+        @classmethod
+        def _normalize_qa_parse_mode(cls, qa_parse_mode):
+            value = str(qa_parse_mode or cls.QA_PARSE_AUTO).strip().lower()
+            value = {
+                "rules": cls.QA_PARSE_RULE,
+                "model": cls.QA_PARSE_LLM,
+                "large_model": cls.QA_PARSE_LLM,
+                "llm_model": cls.QA_PARSE_LLM,
+            }.get(value, value)
+            if value not in cls.QA_PARSE_MODES:
+                raise AppApiException(500, _("QA parse mode is invalid"))
+            return value
+
         @classmethod
         def _validate_model_selection(
-            cls, split_strategy, model_id=None, vision_model_id=None, llm_model_id=None
+            cls,
+            split_strategy,
+            model_id=None,
+            vision_model_id=None,
+            llm_model_id=None,
+            quality_optimize=False,
+            qa_parse_mode=None,
         ):
+            if split_strategy == cls.QA_STRATEGY:
+                normalized_qa_parse_mode = cls._normalize_qa_parse_mode(qa_parse_mode)
+                if (
+                    (
+                        normalized_qa_parse_mode != cls.QA_PARSE_RULE
+                        or cls._to_boolean(quality_optimize)
+                    )
+                    and not model_id
+                ):
+                    raise AppApiException(500, _("QA generation model is required"))
             if split_strategy == cls.LLM_TEXT_STRATEGY and not model_id:
                 raise AppApiException(500, _("Model is not allowed to be empty"))
             if split_strategy == cls.LLM_VISION_STRATEGY and (
@@ -1972,6 +2120,889 @@ class DocumentSerializers(serializers.Serializer):
                 item["source_file_id"] = file_id
             return result_list
 
+        @classmethod
+        def _dedupe_qa_values(cls, values, limit):
+            result = []
+            seen = set()
+            for value in values or []:
+                value = str(value or "").strip()
+                if not value or value in seen:
+                    continue
+                seen.add(value)
+                result.append(value[:255])
+                if len(result) >= limit:
+                    break
+            return result
+
+        @staticmethod
+        def _qa_question_dedupe_key(value):
+            text = re.sub(
+                r"""[\s\u3000，,。！？?!；;:："'“”‘’（）()【】\[\]<>《》·、]""",
+                "",
+                str(value or "").strip().lower(),
+            )
+            text = re.sub(
+                r"""^(?:请问一下|请教一下|想了解一下|能否告诉我|请告诉我|请帮我|请帮忙|想请问|请问|请教|想了解|想知道|麻烦您|麻烦|烦请|劳烦|请您|帮忙|请)+[，,。:：\s]*""",
+                "",
+                text,
+            )
+            text = re.sub(r"""(?:呢|呀|啊|吗|嘛|吧|么)+$""", "", text)
+            return text
+
+        @staticmethod
+        def _qa_dedupe_debug_enabled():
+            return os.getenv("MAXKB_QA_DEDUPE_DEBUG", "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+
+        def _qa_dedupe_debug(self, message, *args):
+            if self._qa_dedupe_debug_enabled():
+                maxkb_logger.info("[QA dedupe] " + message, *args)
+
+        @classmethod
+        def _cosine_similarity(cls, left, right):
+            try:
+                left = [float(value) for value in left]
+                right = [float(value) for value in right]
+            except (TypeError, ValueError):
+                return 0.0
+            if not left or len(left) != len(right):
+                return 0.0
+            left_norm = math.sqrt(sum(value * value for value in left))
+            right_norm = math.sqrt(sum(value * value for value in right))
+            if left_norm == 0 or right_norm == 0:
+                return 0.0
+            return sum(left[index] * right[index] for index in range(len(left))) / (
+                left_norm * right_norm
+            )
+
+        def _get_qa_embedding_model(self):
+            if hasattr(self, "_qa_embedding_model"):
+                return self._qa_embedding_model
+            self._qa_embedding_model = None
+            initial_data = getattr(self, "initial_data", {})
+            knowledge_id = (
+                initial_data.get("knowledge_id")
+                if isinstance(initial_data, dict)
+                else None
+            )
+            if not knowledge_id:
+                return None
+            try:
+                embedding_model_id = get_embedding_model_id_by_knowledge_id(knowledge_id)
+                self._qa_embedding_model = get_embedding_model(embedding_model_id)
+                self._qa_dedupe_debug(
+                    "embedding_model_loaded model_id=%r available=%s",
+                    embedding_model_id,
+                    self._qa_embedding_model is not None,
+                )
+            except Exception as error:
+                maxkb_logger.warning(
+                    "Unable to load QA deduplication embedding model: %s",
+                    error,
+                    exc_info=True,
+                )
+            return self._qa_embedding_model
+
+        def _dedupe_qa_question_groups(self, groups, limit):
+            exact_groups = []
+            all_questions = []
+            normalized_questions = []
+            exact_removed = 0
+            for group_index, values in enumerate(groups or [], start=1):
+                exact_values = []
+                normalized_values = []
+                seen = set()
+                for value in values or []:
+                    value = str(value or "").strip()
+                    key = self._qa_question_dedupe_key(value)
+                    if not value or not key:
+                        continue
+                    if key in seen:
+                        exact_removed += 1
+                        self._qa_dedupe_debug(
+                            "exact_drop group=%d question=%r normalized=%r",
+                            group_index,
+                            value,
+                            key,
+                        )
+                        continue
+                    seen.add(key)
+                    exact_values.append(value[:255])
+                    normalized_values.append(key)
+                    if len(exact_values) >= limit:
+                        break
+                exact_groups.append(exact_values)
+                all_questions.extend(exact_values)
+                normalized_questions.extend(normalized_values)
+
+            if len(all_questions) < 2:
+                return exact_groups
+            embedding_model = self._get_qa_embedding_model()
+            if embedding_model is None:
+                self._qa_dedupe_debug(
+                    "semantic_skip reason=embedding_model_unavailable exact_removed=%d",
+                    exact_removed,
+                )
+                return exact_groups
+            try:
+                vectors = []
+                self._qa_dedupe_debug(
+                    "embedding_start questions=%d batch_size=%d",
+                    len(normalized_questions),
+                    self.QA_EMBEDDING_BATCH_SIZE,
+                )
+                for start in range(0, len(normalized_questions), self.QA_EMBEDDING_BATCH_SIZE):
+                    vectors.extend(
+                        embedding_model.embed_documents(
+                            normalized_questions[
+                                start : start + self.QA_EMBEDDING_BATCH_SIZE
+                            ]
+                        )
+                    )
+            except Exception as error:
+                maxkb_logger.warning(
+                    "Unable to calculate QA question similarity: %s",
+                    error,
+                    exc_info=True,
+                )
+                self._qa_dedupe_debug("semantic_skip reason=embedding_failed")
+                return exact_groups
+            if not isinstance(vectors, list) or len(vectors) != len(all_questions):
+                self._qa_dedupe_debug(
+                    "semantic_skip reason=invalid_embedding_count expected=%d actual=%d",
+                    len(all_questions),
+                    len(vectors) if isinstance(vectors, list) else -1,
+                )
+                return exact_groups
+            self._qa_dedupe_debug(
+                "embedding_success questions=%d vectors=%d",
+                len(all_questions),
+                len(vectors),
+            )
+
+            result_groups = []
+            offset = 0
+            semantic_removed = 0
+            for group_index, values in enumerate(exact_groups, start=1):
+                group_vectors = vectors[offset : offset + len(values)]
+                offset += len(values)
+                result = []
+                kept_vectors = []
+                kept_questions = []
+                for value, vector in zip(values, group_vectors):
+                    similarities = [
+                        self._cosine_similarity(vector, kept_vector)
+                        for kept_vector in kept_vectors
+                    ]
+                    best_similarity = max(similarities, default=0.0)
+                    if best_similarity >= self.QA_QUESTION_SIMILARITY_THRESHOLD:
+                        semantic_removed += 1
+                        representative = kept_questions[similarities.index(best_similarity)]
+                        self._qa_dedupe_debug(
+                            "semantic_drop group=%d question=%r representative=%r similarity=%.4f threshold=%.4f",
+                            group_index,
+                            value,
+                            representative,
+                            best_similarity,
+                            self.QA_QUESTION_SIMILARITY_THRESHOLD,
+                        )
+                        continue
+                    result.append(value)
+                    kept_vectors.append(vector)
+                    kept_questions.append(value)
+                    if len(result) >= limit:
+                        break
+                result_groups.append(result)
+            self._qa_dedupe_debug(
+                "finish groups=%d input=%d exact_removed=%d semantic_removed=%d output=%d threshold=%.4f",
+                len(exact_groups),
+                len(all_questions),
+                exact_removed,
+                semantic_removed,
+                sum(len(group) for group in result_groups),
+                self.QA_QUESTION_SIMILARITY_THRESHOLD,
+            )
+            return result_groups
+
+        def _dedupe_qa_question_values(self, values, limit):
+            return self._dedupe_qa_question_groups([values], limit)[0]
+
+        def _dedupe_qa_problem_list(self, problem_list):
+            question_values = [
+                item.get("content")
+                for item in problem_list or []
+                if isinstance(item, dict) and item.get("kind") == "question"
+            ]
+            if len(question_values) < 2:
+                return problem_list
+            kept_questions = self._dedupe_qa_question_values(
+                question_values, self.QA_QUESTION_LIST_LIMIT
+            )
+            kept_keys = {self._qa_question_dedupe_key(value) for value in kept_questions}
+            result = []
+            seen_questions = set()
+            for item in problem_list or []:
+                if not isinstance(item, dict) or item.get("kind") != "question":
+                    result.append(item)
+                    continue
+                key = self._qa_question_dedupe_key(item.get("content"))
+                if key in kept_keys and key not in seen_questions:
+                    result.append(item)
+                    seen_questions.add(key)
+            return result
+
+        def _dedupe_qa_result_questions(self, qa_pairs):
+            question_groups = [
+                [
+                    item.get("content")
+                    for item in qa_pair.get("problem_list") or []
+                    if isinstance(item, dict) and item.get("kind") == "question"
+                ]
+                for qa_pair in qa_pairs or []
+            ]
+            deduped_groups = self._dedupe_qa_question_groups(
+                question_groups, self.QA_QUESTION_LIST_LIMIT
+            )
+            for qa_pair, kept_questions in zip(qa_pairs or [], deduped_groups):
+                kept_keys = {
+                    self._qa_question_dedupe_key(value) for value in kept_questions
+                }
+                problem_list = []
+                seen_questions = set()
+                for item in qa_pair.get("problem_list") or []:
+                    if not isinstance(item, dict) or item.get("kind") != "question":
+                        problem_list.append(item)
+                        continue
+                    key = self._qa_question_dedupe_key(item.get("content"))
+                    if key in kept_keys and key not in seen_questions:
+                        problem_list.append(item)
+                        seen_questions.add(key)
+                qa_pair["problem_list"] = problem_list
+                qa_pair["related_questions"] = [
+                    item.get("content")
+                    for item in problem_list
+                    if isinstance(item, dict) and item.get("kind") == "question"
+                ]
+                qa_pair["keywords"] = [
+                    item.get("content")
+                    for item in problem_list
+                    if isinstance(item, dict) and item.get("kind") == "keyword"
+                ]
+            return qa_pairs
+
+        @classmethod
+        def _is_valid_qa_keyword(cls, value):
+            if not 2 <= len(value) <= 18:
+                return False
+            if value in cls.QA_KEYWORD_STOPWORDS:
+                return False
+            if cls._is_probable_question(value):
+                return False
+            if re.fullmatch(r"[\d\W_]+", value):
+                return False
+            return bool(re.search(r"[\u4e00-\u9fa5A-Za-z]", value))
+
+        @classmethod
+        def _extract_qa_keywords(cls, *texts):
+            keyword_values = []
+            for text in texts:
+                text = str(text or "").strip()
+                if not text:
+                    continue
+                for phrase in re.split(r"[\n。；;，,、：:（）()【】\[\]《》]+", text):
+                    phrase = phrase.strip()
+                    if cls._is_valid_qa_keyword(phrase):
+                        keyword_values.append(phrase)
+                try:
+                    keyword_values.extend(get_keyword(text))
+                except Exception:
+                    continue
+            keyword_values = [
+                str(value or "").strip(" \t\r\n。；;，,、：:（）()【】[]《》")
+                for value in keyword_values
+            ]
+            keyword_values = [
+                value for value in keyword_values if cls._is_valid_qa_keyword(value)
+            ]
+            keyword_values.sort(key=lambda value: (-len(value), value))
+            return cls._dedupe_qa_values(keyword_values, cls.QA_KEYWORD_LIST_LIMIT)
+
+        @classmethod
+        def _normalize_qa_problem_list(
+            cls, title, problem_list, keywords=None, content=None, expand_related=True
+        ):
+            question_values = []
+            keyword_values = []
+            if title:
+                question_values.extend(
+                    expand_query_variants(title, limit=cls.QA_RELATED_QUESTION_LIMIT)
+                )
+            for problem in problem_list or []:
+                problem_content = (
+                    problem.get("content") if isinstance(problem, dict) else problem
+                )
+                if problem_content:
+                    if cls._is_probable_question(problem_content):
+                        if expand_related:
+                            question_values.extend(
+                                expand_query_variants(
+                                    problem_content,
+                                    limit=max(4, cls.QA_RELATED_QUESTION_LIMIT // 2),
+                                )
+                            )
+                        else:
+                            question_values.append(problem_content)
+                    else:
+                        keyword_values.append(problem_content)
+            keyword_values.extend(keywords or [])
+            keyword_values.extend(cls._extract_qa_keywords(title, content))
+
+            result = []
+            seen = set()
+            for value in cls._dedupe_qa_values(
+                question_values, cls.QA_QUESTION_LIST_LIMIT
+            ):
+                seen.add(value)
+                result.append({"content": value, "kind": "question"})
+            keyword_count = 0
+            for value in cls._dedupe_qa_values(
+                keyword_values, cls.QA_PROBLEM_LIST_LIMIT
+            ):
+                if value in seen:
+                    continue
+                result.append({"content": value, "kind": "keyword"})
+                keyword_count += 1
+                if keyword_count >= cls.QA_KEYWORD_LIST_LIMIT:
+                    break
+            return result
+
+        @classmethod
+        def _qa_problem_prompt_values(cls, problem_list):
+            related_questions = []
+            keywords = []
+            for problem in problem_list or []:
+                content = problem.get("content") if isinstance(problem, dict) else problem
+                content = str(content or "").strip()
+                if not content:
+                    continue
+                kind = problem.get("kind") if isinstance(problem, dict) else None
+                if kind == "keyword" or (
+                    not kind and not cls._is_probable_question(content)
+                ):
+                    keywords.append(content)
+                else:
+                    related_questions.append(content)
+            return {
+                "related_questions": cls._dedupe_qa_values(
+                    related_questions, cls.QA_QUESTION_LIST_LIMIT
+                ),
+                "keywords": cls._dedupe_qa_values(
+                    keywords, cls.QA_KEYWORD_LIST_LIMIT
+                ),
+            }
+
+        def _normalize_qa_split_result(self, result, file_name):
+            normalized = []
+            result_list = result if isinstance(result, list) else [result]
+            for item in result_list:
+                paragraphs = item.get("paragraphs", item.get("content", [])) or []
+                content = []
+                for paragraph in paragraphs:
+                    title = str(paragraph.get("title") or "").strip()
+                    paragraph_content = str(paragraph.get("content") or "").strip()
+                    if not paragraph_content:
+                        continue
+                    problem_list = self._normalize_qa_problem_list(
+                        title,
+                        paragraph.get("problem_list"),
+                        content=paragraph_content,
+                    )
+                    content.append(
+                        {
+                            "title": title[:255],
+                            "content": paragraph_content[:102400],
+                            "problem_list": problem_list,
+                            "related_questions": [
+                                problem.get("content")
+                                for problem in problem_list
+                                if problem.get("kind") == "question"
+                            ],
+                            "keywords": [
+                                problem.get("content")
+                                for problem in problem_list
+                                if problem.get("kind") == "keyword"
+                            ],
+                        }
+                    )
+                self._dedupe_qa_result_questions(content)
+                normalized.append({"name": item.get("name") or file_name, "content": content})
+            return normalized
+
+        def _parse_qa_rule_split_file(self, file, get_buffer):
+            fallback_result = [{"name": file.name, "content": []}]
+            for qa_split_handle in qa_split_handle_list:
+                if not qa_split_handle.support(file, get_buffer):
+                    continue
+                result = self._normalize_qa_split_result(
+                    qa_split_handle.handle(file, get_buffer, self.save_image),
+                    file.name,
+                )
+                if any(item.get("content") for item in result):
+                    return result
+                fallback_result = result
+            extracted_result = self._parse_qa_from_regular_split_file(file, get_buffer)
+            if extracted_result:
+                return extracted_result
+            return fallback_result
+
+        def _build_qa_split_result(self, file, get_buffer, qa_parse_mode, model_id, limit):
+            qa_parse_mode = self._normalize_qa_parse_mode(qa_parse_mode)
+            if qa_parse_mode != self.QA_PARSE_LLM:
+                rule_result = self._parse_qa_rule_split_file(file, get_buffer)
+                if any(item.get("content") for item in rule_result):
+                    self._qa_dedupe_debug(
+                        "qa_parse_selected parser=rule mode=%r pairs=%d",
+                        qa_parse_mode,
+                        sum(len(item.get("content") or []) for item in rule_result),
+                    )
+                    return rule_result
+                if qa_parse_mode == self.QA_PARSE_RULE:
+                    raise AppApiException(500, _("No standard QA pairs detected"))
+
+            source_result = self._parse_regular_source_file(file, get_buffer)
+            self._qa_dedupe_debug(
+                "qa_parse_selected parser=model mode=%r source_paragraphs=%d model_id=%r",
+                qa_parse_mode,
+                sum(len(item.get("content") or []) for item in source_result),
+                model_id,
+            )
+            return self._generate_qa_split_result(source_result, model_id, limit)
+
+        def _parse_regular_source_file(self, file, get_buffer):
+            for split_handle in split_handles:
+                if not split_handle.support(file, get_buffer):
+                    continue
+                result = split_handle.handle(
+                    file, None, True, self.MODEL_BATCH_LIMIT, get_buffer, self.save_image
+                )
+                normalized = self._normalize_qa_split_result(result, file.name)
+                if any(item.get("content") for item in normalized):
+                    return normalized
+            return []
+
+        def _parse_qa_from_regular_split_file(self, file, get_buffer):
+            for split_handle in split_handles:
+                if not split_handle.support(file, get_buffer):
+                    continue
+                result = split_handle.handle(file, None, True, 102400, get_buffer, self.save_image)
+                qa_result = []
+                for item in result if isinstance(result, list) else [result]:
+                    paragraphs = text_qa_split_handle._parse_content(self._split_result_to_text(item))
+                    if paragraphs:
+                        qa_result.extend(
+                            self._normalize_qa_split_result(
+                                {
+                                    "name": item.get("name") or file.name,
+                                    "paragraphs": paragraphs,
+                                },
+                                file.name,
+                            )
+                        )
+                if qa_result:
+                    return qa_result
+            return []
+
+        @staticmethod
+        def _split_result_to_text(result):
+            text_parts = []
+            for paragraph in result.get("content", result.get("paragraphs", [])) or []:
+                if isinstance(paragraph, dict):
+                    title = paragraph.get("title")
+                    content = paragraph.get("content")
+                    if title:
+                        text_parts.append(str(title))
+                    if content:
+                        text_parts.append(str(content))
+                elif paragraph:
+                    text_parts.append(str(paragraph))
+            return "\n".join(text_parts)
+
+        @staticmethod
+        def _qa_model_values(value):
+            if isinstance(value, list):
+                values = value
+            else:
+                values = re.split(r"[\n,，、;；|]+", str(value or ""))
+            return [str(item or "").strip() for item in values if str(item or "").strip()]
+
+        def _qa_model_prompt(self, document_name, content, limit):
+            return (
+                "你是知识库问答构建器。请只根据原文，把文档转换成适合检索的一问一答知识。\n"
+                "普通文档也要主动识别其中的规则、条件、流程、例外、时间、对象和结果，"
+                "为每个可以独立回答的知识点生成一个问题和答案。\n"
+                f"文档名：{document_name}\n"
+                f"单个答案尽量不超过 {limit} 字；答案必须保留原文中的关键条件、例外和数值。\n"
+                "不要补充原文没有的信息，不要把多个无关主题合并成一个问答。\n"
+                "question 必须是用户会输入的自然问题，不能使用章节标题、条款标题或名词短语代替问题。\n"
+                "每个问答必须生成 5-8 个 related_questions，表示同一个答案的不同自然问法；"
+                "related_questions 必须是完整问句，不能写成关键词或名词短语。\n"
+                "每个问答还要生成 3-8 个关键词。关键词和不同问法必须与该问答的内容一致，不能凭空扩展。\n"
+                "只输出 JSON，不要输出 Markdown 代码块、解释文字或前后缀。\n"
+                'JSON 格式必须是：{"qa_pairs":[{"question":"用户问题","answer":"根据原文整理的答案",'
+                '"keywords":["关键词1","关键词2"],"related_questions":["另一种问法1","另一种问法2"]}]}\n'
+                "如果原文中没有可回答的知识，返回 {\"qa_pairs\":[]}。\n"
+                "待处理原文：\n"
+                f"{content}"
+            )
+
+        @staticmethod
+        def _is_probable_question(value):
+            text = str(value or "").strip()
+            if not text:
+                return False
+            if re.match(r"^第[一二三四五六七八九十百千万\d]+[章节条款编部分篇]", text):
+                return False
+            if re.search(r"[？?]\s*$", text):
+                return True
+            return bool(
+                re.search(
+                    r"(什么|啥|哪些|哪种|如何|怎么|怎样|为什么|为何|是否|能否|可否|"
+                    r"可以|能不能|要不要|需要|应该|应当|谁|哪里|哪儿|何时|多久|多少|怎么办|咋办|吗|呢)",
+                    text,
+                )
+            )
+
+        def _normalize_qa_model_result(self, payload, strict_question=False):
+            pairs = payload.get("qa_pairs") if isinstance(payload, dict) else None
+            if not isinstance(pairs, list):
+                raise AppApiException(500, _("QA model result is not valid JSON"))
+
+            result = []
+            for item in pairs:
+                if not isinstance(item, dict):
+                    continue
+                question = str(item.get("question") or item.get("title") or "").strip()
+                answer = str(item.get("answer") or item.get("content") or "").strip()
+                if not question or not answer:
+                    continue
+                if strict_question and not self._is_probable_question(question):
+                    continue
+                related_questions = self._qa_model_values(item.get("related_questions"))
+                keywords = self._qa_model_values(item.get("keywords"))
+                problem_list = self._normalize_qa_problem_list(
+                    question,
+                    [{"content": value} for value in related_questions],
+                    keywords,
+                    content=answer,
+                    expand_related=False,
+                )
+                normalized_related_questions = [
+                    problem.get("content")
+                    for problem in problem_list
+                    if isinstance(problem, dict) and problem.get("kind") == "question"
+                ]
+                normalized_keywords = [
+                    problem.get("content")
+                    for problem in problem_list
+                    if isinstance(problem, dict) and problem.get("kind") == "keyword"
+                ]
+                self._qa_dedupe_debug(
+                    "model_item question=%r raw_related=%d raw_keywords=%d normalized_related=%d normalized_keywords=%d",
+                    question,
+                    len(related_questions),
+                    len(keywords),
+                    len(normalized_related_questions),
+                    len(normalized_keywords),
+                )
+                result.append(
+                    {
+                        "title": question[:255],
+                        "content": answer[:102400],
+                        "problem_list": problem_list,
+                        "related_questions": normalized_related_questions,
+                        "keywords": normalized_keywords,
+                    }
+                )
+            self._dedupe_qa_result_questions(result)
+            self._qa_dedupe_debug(
+                "model_result pairs=%d related_questions=%d keywords=%d",
+                len(result),
+                sum(len(item.get("related_questions") or []) for item in result),
+                sum(len(item.get("keywords") or []) for item in result),
+            )
+            return result
+
+        def _generate_qa_with_model(self, document_name, paragraphs, model_id, limit):
+            blocks = self._paragraph_blocks(paragraphs, self.MODEL_BATCH_LIMIT)
+            if not blocks:
+                raise AppApiException(500, _("QA source content is empty"))
+
+            llm_model = self._get_model(model_id, ModelTypeConst.LLM.name)
+            batches = self._batch_blocks(blocks, self.LLM_TEXT_STRATEGY)
+            result = []
+            self._qa_dedupe_debug(
+                "qa_model_start document=%r model_id=%r batches=%d",
+                document_name,
+                model_id,
+                len(batches),
+            )
+            self._report_progress("qa_generating", 0, len(batches), "正在生成问答和关键词")
+            for index, batch in enumerate(batches, start=1):
+                prompt = self._qa_model_prompt(document_name, batch, self._normalize_limit(limit))
+                last_error = None
+                generated = None
+                for attempt in range(1, 3):
+                    try:
+                        self._qa_dedupe_debug(
+                            "model_request batch=%d attempt=%d prompt_chars=%d",
+                            index,
+                            attempt,
+                            len(prompt),
+                        )
+                        response = llm_model.invoke([HumanMessage(content=prompt)])
+                        payload = self._loads_json_payload(self._response_content(response))
+                        generated = self._normalize_qa_model_result(payload, strict_question=True)
+                        if not generated:
+                            raise AppApiException(500, _("QA model result is empty"))
+                        self._qa_dedupe_debug(
+                            "batch_generated batch=%d questions=%d keywords=%d",
+                            index,
+                            sum(len(item.get("related_questions") or []) for item in generated),
+                            sum(len(item.get("keywords") or []) for item in generated),
+                        )
+                        break
+                    except AppApiException as error:
+                        last_error = error
+                        self._qa_dedupe_debug(
+                            "model_attempt_failed batch=%d attempt=%d error=%s",
+                            index,
+                            attempt,
+                            error,
+                        )
+                    except Exception as error:
+                        last_error = AppApiException(500, str(error))
+                        self._qa_dedupe_debug(
+                            "model_attempt_failed batch=%d attempt=%d error=%s",
+                            index,
+                            attempt,
+                            error,
+                        )
+                if generated is None:
+                    raise last_error or AppApiException(500, _("QA model result is invalid"))
+                result.extend(generated)
+                self._report_progress(
+                    "qa_generating",
+                    index,
+                    len(batches),
+                    f"正在生成问答，第 {index}/{len(batches)} 批",
+                )
+            if not result:
+                raise AppApiException(500, _("QA model result is empty"))
+            return result
+
+        def _generate_qa_split_result(self, source_result, model_id, limit):
+            result = []
+            for item in source_result:
+                content = self._generate_qa_with_model(
+                    item.get("name") or "",
+                    item.get("content") or [],
+                    model_id,
+                    limit,
+                )
+                result.append({"name": item.get("name") or "", "content": content})
+            if not result:
+                raise AppApiException(500, _("QA source content is empty"))
+            return result
+
+        def _qa_quality_prompt(self, document_name, qa_pairs, limit):
+            return (
+                "你是知识库 QA 质量优化器。请只优化一问一答条目，不能改成普通段落分段。\n"
+                "允许做的事：把问题改得更像用户会问的话；把答案整理得更清楚；"
+                "补充更准确的关键词和同答案的多种自然问法；合并重复问答；把一个包含多个独立知识点的问答拆成多个问答。\n"
+                "不允许做的事：补充原文没有的信息；改变事实、条件、对象、时间、数值；输出普通 paragraphs 结构。\n"
+                f"单个答案尽量不超过 {limit} 字，答案必须保留原问答中的关键条件、例外和数值。\n"
+                "每个问答必须生成 5-8 个 related_questions，且必须是完整问题，不能用关键词代替。\n"
+                "只输出 JSON，不要输出 Markdown 代码块、解释文字或前后缀。\n"
+                'JSON 格式必须是：{"qa_pairs":[{"question":"用户问题","answer":"答案",'
+                '"keywords":["关键词1","关键词2"],"related_questions":["另一种问法1","另一种问法2"]}]}\n'
+                f"文档名：{document_name}\n待优化 QA：\n"
+                f"{json.dumps(qa_pairs, ensure_ascii=False)}"
+            )
+
+        @staticmethod
+        def _qa_quality_source_ids(batch, accepted):
+            source_ids = [
+                str(paragraph.get("id"))
+                for paragraph in batch
+                if paragraph.get("id")
+            ]
+            if not source_ids:
+                return
+            if len(batch) == len(accepted):
+                for item, paragraph in zip(accepted, batch):
+                    if paragraph.get("id"):
+                        item["source_paragraph_ids"] = [str(paragraph["id"])]
+                return
+            for item in accepted:
+                item["source_paragraph_ids"] = source_ids
+
+        @staticmethod
+        def _qa_quality_batch_items(qa_pairs):
+            max_batch_characters = 4000
+            batches = []
+            batch = []
+            batch_size = 0
+            for qa_pair in qa_pairs:
+                item_size = len(str(qa_pair.get("title") or "")) + len(
+                    str(qa_pair.get("content") or "")
+                )
+                if batch and batch_size + item_size > max_batch_characters:
+                    batches.append(batch)
+                    batch = []
+                    batch_size = 0
+                batch.append(qa_pair)
+                batch_size += item_size
+            if batch:
+                batches.append(batch)
+            return batches
+
+        def _quality_optimize_qa_pairs(self, document_name, qa_pairs, enabled, model_id, limit):
+            self._report_progress("quality_cleaning", 0, 0, "正在清洗问答噪声")
+            cleaned, report = clean_paragraphs(
+                qa_pairs, str(document_name or "").lower().endswith(".pdf")
+            )
+            for qa_pair in cleaned:
+                problem_list = self._normalize_qa_problem_list(
+                    qa_pair.get("title"),
+                    qa_pair.get("problem_list"),
+                    content=qa_pair.get("content"),
+                    expand_related=False,
+                )
+                qa_pair["problem_list"] = problem_list
+                qa_pair["related_questions"] = [
+                    problem.get("content")
+                    for problem in problem_list
+                    if isinstance(problem, dict) and problem.get("kind") == "question"
+                ]
+                qa_pair["keywords"] = [
+                    problem.get("content")
+                    for problem in problem_list
+                    if isinstance(problem, dict) and problem.get("kind") == "keyword"
+                ]
+                self._qa_dedupe_debug(
+                    "quality_item question=%r related_questions=%d keywords=%d",
+                    qa_pair.get("title"),
+                    len(qa_pair["related_questions"]),
+                    len(qa_pair["keywords"]),
+                )
+            self._dedupe_qa_result_questions(cleaned)
+            report.update(
+                {
+                    "titles_rewritten": 0,
+                    "split_paragraphs": 0,
+                    "merged_paragraphs": 0,
+                    "fallback_batches": 0,
+                    "processed_batches": 0,
+                    "total_batches": 0,
+                }
+            )
+            if not enabled:
+                return cleaned, report
+            if not model_id:
+                raise AppApiException(500, _("Model is not allowed to be empty"))
+
+            batches = self._qa_quality_batch_items(cleaned)
+            report["total_batches"] = len(batches)
+            model = self._get_model(model_id, ModelTypeConst.LLM.name)
+            optimized = []
+            self._report_progress("quality_optimizing", 0, len(batches), "正在优化问答质量")
+            for index, batch in enumerate(batches, start=1):
+                prompt_batch = []
+                for item in batch:
+                    problem_values = self._qa_problem_prompt_values(
+                        item.get("problem_list")
+                    )
+                    prompt_batch.append(
+                        {
+                            "question": item.get("title") or "",
+                            "answer": item.get("content") or "",
+                            "keywords": problem_values["keywords"],
+                            "related_questions": problem_values["related_questions"],
+                        }
+                    )
+                accepted = None
+                for _attempt in range(2):
+                    try:
+                        response = model.invoke(
+                            [
+                                HumanMessage(
+                                    content=self._qa_quality_prompt(
+                                        document_name,
+                                        prompt_batch,
+                                        self._normalize_limit(limit),
+                                    )
+                                )
+                            ]
+                        )
+                        payload = self._loads_json_payload(self._response_content(response))
+                        result = self._normalize_qa_model_result(payload, strict_question=True)
+                    except AppApiException:
+                        continue
+                    if result:
+                        accepted = result
+                        break
+                if accepted is None:
+                    report["fallback_batches"] += 1
+                    for qa_pair in batch:
+                        fallback = dict(qa_pair)
+                        if qa_pair.get("id"):
+                            fallback["source_paragraph_ids"] = [str(qa_pair["id"])]
+                        optimized.append(fallback)
+                else:
+                    self._qa_quality_source_ids(batch, accepted)
+                    report["titles_rewritten"] += sum(
+                        1
+                        for original, item in zip(batch, accepted)
+                        if str(original.get("title") or "").strip()
+                        != str(item.get("title") or "").strip()
+                    )
+                    report["split_paragraphs"] += max(len(accepted) - len(batch), 0)
+                    report["merged_paragraphs"] += max(len(batch) - len(accepted), 0)
+                    optimized.extend(accepted)
+                report["processed_batches"] = index
+                self._report_progress(
+                    "quality_optimizing",
+                    index,
+                    len(batches),
+                    f"正在优化问答质量，第 {index}/{len(batches)} 批，回退 {report['fallback_batches']} 批",
+                )
+            related_before_final_dedupe = sum(
+                len(item.get("related_questions") or []) for item in optimized
+            )
+            self._dedupe_qa_result_questions(optimized)
+            related_after_final_dedupe = sum(
+                len(item.get("related_questions") or []) for item in optimized
+            )
+            self._qa_dedupe_debug(
+                "quality_dedupe related_questions_before=%d after=%d",
+                related_before_final_dedupe,
+                related_after_final_dedupe,
+            )
+            report["paragraphs_after"] = len(optimized)
+            self._qa_dedupe_debug(
+                "quality_result pairs=%d related_questions=%d keywords=%d fallback_batches=%d",
+                len(optimized),
+                sum(len(item.get("related_questions") or []) for item in optimized),
+                sum(len(item.get("keywords") or []) for item in optimized),
+                report["fallback_batches"],
+            )
+            self._report_progress("quality_validating", len(batches), len(batches), "问答质量校验完成")
+            return optimized, report
+
         def _apply_model_split(
             self, result_list, split_strategy, model_id, vision_model_id, llm_model_id, limit
         ):
@@ -2003,15 +3034,24 @@ class DocumentSerializers(serializers.Serializer):
             return result_list
 
         def _apply_quality_optimization(
-            self, result_list, quality_optimize, quality_model_id
+            self, result_list, quality_optimize, quality_model_id, qa_mode=False, limit=4096
         ):
             for result in result_list:
-                content, report = self._quality_optimize_paragraphs(
-                    result.get("name") or "",
-                    result.get("content") or [],
-                    quality_optimize,
-                    quality_model_id,
-                )
+                if qa_mode:
+                    content, report = self._quality_optimize_qa_pairs(
+                        result.get("name") or "",
+                        result.get("content") or [],
+                        quality_optimize,
+                        quality_model_id,
+                        limit,
+                    )
+                else:
+                    content, report = self._quality_optimize_paragraphs(
+                        result.get("name") or "",
+                        result.get("content") or [],
+                        quality_optimize,
+                        quality_model_id,
+                    )
                 result["content"] = content
                 result["quality_report"] = report
             return result_list
@@ -2027,6 +3067,7 @@ class DocumentSerializers(serializers.Serializer):
             vision_model_id=None,
             llm_model_id=None,
             quality_optimize=False,
+            qa_parse_mode=None,
         ):
             # 保存源文件
             file_id = uuid.uuid7()
@@ -2044,6 +3085,39 @@ class DocumentSerializers(serializers.Serializer):
             file.seek(0)
 
             get_buffer = FileBufferHandle().get_buffer
+            if split_strategy == self.QA_STRATEGY:
+                qa_result = self._build_qa_split_result(
+                    file,
+                    get_buffer,
+                    qa_parse_mode,
+                    model_id,
+                    limit,
+                )
+                result = self._apply_quality_optimization(
+                    self._wrap_split_result(qa_result, file_id),
+                    quality_optimize,
+                    model_id,
+                    qa_mode=True,
+                    limit=limit,
+                )
+                self._qa_dedupe_debug(
+                    "qa_preview_result file=%r pairs=%d related_questions=%d keywords=%d quality=%s",
+                    file.name,
+                    sum(len(item.get("content") or []) for item in result),
+                    sum(
+                        len(qa_pair.get("related_questions") or [])
+                        for item in result
+                        for qa_pair in item.get("content") or []
+                    ),
+                    sum(
+                        len(qa_pair.get("keywords") or [])
+                        for item in result
+                        for qa_pair in item.get("content") or []
+                    ),
+                    bool(quality_optimize),
+                )
+                return result
+
             for split_handle in split_handles:
                 if split_handle.support(file, get_buffer):
                     if split_strategy == self.LLM_VISION_STRATEGY and isinstance(split_handle, PdfSplitHandle):

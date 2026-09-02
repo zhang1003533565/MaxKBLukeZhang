@@ -101,6 +101,17 @@ export default {
       label: 'Advanced Segmentation',
       text: 'Users can customize segmentation delimiters, segment length, and cleaning rules based on document standards.',
     },
+    qa: {
+      label: 'QA Pair Segmentation',
+      text: 'Auto-detect standard QA pairs; use a text LLM for ordinary documents to generate questions, answers, keywords, and variants.',
+      previewUnit: 'QA pairs',
+    },
+    qaParseMode: {
+      label: 'QA Parse Mode',
+      auto: 'Auto Recommended',
+      rule: 'Rule Only',
+      llm: 'LLM Only',
+    },
     llmText: {
       label: 'LLM Text Segmentation',
       text: 'Use a text-only LLM to split by semantics. Images are kept as references.',
@@ -112,8 +123,10 @@ export default {
     model: {
       label: 'Segmentation Model',
       llmLabel: 'Text Segmentation Model',
+      qaLabel: 'QA Generation Model',
       visionLabel: 'Vision Understanding Model',
       llmPlaceholder: 'Select a text LLM',
+      qaPlaceholder: 'Select a text LLM for QA generation',
       visionPlaceholder: 'Select a vision model',
     },
     patterns: {

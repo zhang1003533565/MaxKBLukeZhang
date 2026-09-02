@@ -157,8 +157,9 @@ function clearStore() {
 function submit() {
   loading.value = true
   const documents = [] as any
+  const shouldPreserveProblemList = SetRulesRef.value?.shouldPreserveProblemList?.() || false
   SetRulesRef.value?.paragraphList.map((item: any) => {
-    if (!SetRulesRef.value?.checkedConnect) {
+    if (!shouldPreserveProblemList) {
       item.content.map((v: any) => {
         delete v['problem_list']
       })

@@ -46,11 +46,15 @@ class DocumentSplitAPI(APIMixin):
                     },
                     'split_strategy': {
                         'type': 'string',
-                        'description': '切分策略：llm_text 为纯文本大模型切分，llm_vision 为图文大模型切分'
+                        'description': '切分策略：qa 为 QA 问答切分，llm_text 为纯文本大模型切分，llm_vision 为图文大模型切分'
+                    },
+                    'qa_parse_mode': {
+                        'type': 'string',
+                        'description': 'QA 解析方式：auto 自动识别，rule 仅规则解析，llm 仅大模型解析'
                     },
                     'model_id': {
                         'type': 'string',
-                        'description': 'llm_text 使用的文本模型 ID'
+                        'description': 'qa 自动/大模型解析、llm_text 或高质量优化使用的文本模型 ID'
                     },
                     'vision_model_id': {
                         'type': 'string',

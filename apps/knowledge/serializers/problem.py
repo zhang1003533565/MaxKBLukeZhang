@@ -26,6 +26,7 @@ class ProblemSerializer(serializers.ModelSerializer):
 class ProblemInstanceSerializer(serializers.Serializer):
     id = serializers.CharField(required=False, label=_('problem id'))
     content = serializers.CharField(required=True, max_length=256, label=_('content'))
+    kind = serializers.CharField(required=False, allow_blank=True, label=_('problem kind'))
 
 
 class ProblemEditSerializer(serializers.Serializer):

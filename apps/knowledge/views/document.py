@@ -83,6 +83,7 @@ def build_document_split_data(request):
         "limit",
         "with_filter",
         "split_strategy",
+        "qa_parse_mode",
         "model_id",
         "vision_model_id",
         "llm_model_id",
@@ -322,6 +323,8 @@ class DocumentView(APIView):
                 split_data.get("model_id"),
                 split_data.get("vision_model_id"),
                 split_data.get("llm_model_id"),
+                split_data.get("quality_optimize"),
+                split_data.get("qa_parse_mode"),
             )
             task_id = str(uuid.uuid7())
             input_file_ids = []

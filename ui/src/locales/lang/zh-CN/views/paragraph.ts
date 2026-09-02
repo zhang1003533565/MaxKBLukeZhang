@@ -16,6 +16,8 @@ export default {
   },
   relatedProblem: {
     title: '关联问题',
+    previewTitle: '相似问法',
+    keywordTitle: '关键词',
     placeholder: '请选择问题'
   },
   form: {

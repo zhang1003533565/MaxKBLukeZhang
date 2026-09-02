@@ -177,8 +177,10 @@ class KnowledgeOpenAPIDocsView(PublicAPIView):
                         "path": "/openapi/knowledge/v1/workspaces/{workspace_id}/knowledges/{knowledge_id}/documents/upload",
                         "description": (
                             "创建异步上传任务，完成后可预览并确认入库。"
-                            "可选 split_strategy=llm_text 或 llm_vision；"
-                            "llm_text 需传 model_id，llm_vision 需传 vision_model_id 和 llm_model_id。"
+                            "可选 split_strategy=qa、llm_text 或 llm_vision；"
+                            "qa_parse_mode 可选 auto、rule、llm；"
+                            "qa 自动/大模型解析、llm_text 需传 model_id，"
+                            "llm_vision 需传 vision_model_id 和 llm_model_id。"
                         ),
                         "form_data": [
                             {"name": "file", "type": "file", "required": True},
@@ -189,7 +191,14 @@ class KnowledgeOpenAPIDocsView(PublicAPIView):
                                 "name": "split_strategy",
                                 "type": "string",
                                 "required": False,
-                                "enum": ["llm_text", "llm_vision"],
+                                "enum": ["qa", "llm_text", "llm_vision"],
+                            },
+                            {
+                                "name": "qa_parse_mode",
+                                "type": "string",
+                                "required": False,
+                                "default": "auto",
+                                "enum": ["auto", "rule", "llm"],
                             },
                             {"name": "model_id", "type": "uuid", "required": False},
                             {"name": "vision_model_id", "type": "uuid", "required": False},
@@ -338,6 +347,7 @@ class KnowledgeOpenAPIUploadDocumentView(APIView):
             "patterns": _get_patterns(request),
             "with_filter": _to_bool(request.data.get("with_filter")),
             "split_strategy": request.data.get("split_strategy") or "",
+            "qa_parse_mode": request.data.get("qa_parse_mode") or "",
             "model_id": request.data.get("model_id") or None,
             "vision_model_id": request.data.get("vision_model_id") or None,
             "llm_model_id": request.data.get("llm_model_id") or None,
@@ -353,6 +363,8 @@ class KnowledgeOpenAPIUploadDocumentView(APIView):
             split_data.get("model_id"),
             split_data.get("vision_model_id"),
             split_data.get("llm_model_id"),
+            split_data.get("quality_optimize"),
+            split_data.get("qa_parse_mode"),
         )
         task_id = str(uuid.uuid7())
         idempotency_key = request.data.get("idempotency_key") or request.headers.get(

@@ -283,6 +283,25 @@ class SplitPreviewProgressTest(SimpleTestCase):
         self.assertEqual(failed_call.kwargs["error"], "处理失败，请检查模型配置或稍后重试")
         filtered.delete.assert_called_once()
 
+    def test_split_preview_error_message_distinguishes_model_connection_failure(self):
+        from knowledge.task.split_preview import _split_preview_error_message
+
+        error = RuntimeError("Connection error.")
+        error.__cause__ = OSError("[WinError 10061] 由于目标计算机积极拒绝，无法连接。")
+
+        self.assertEqual(
+            _split_preview_error_message(error),
+            "模型服务连接失败，请检查模型 API 地址、网络或代理配置",
+        )
+
+    def test_split_preview_error_message_distinguishes_qa_format_failure(self):
+        from knowledge.task.split_preview import _split_preview_error_message
+
+        self.assertEqual(
+            _split_preview_error_message(RuntimeError("QA model result is not valid JSON")),
+            "模型返回格式不是 QA JSON，请重新生成预览或更换模型",
+        )
+
     @patch("knowledge.serializers.document.DocumentSerializers.Split")
     @patch("knowledge.task.split_preview.update_split_task_state")
     @patch("knowledge.task.split_preview.QuerySet")

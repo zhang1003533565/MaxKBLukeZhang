@@ -9,7 +9,7 @@
           </div>
         </template>
         <div class="mb-16">
-          <el-text type="info">{{ item.content.length }} {{ $t('views.paragraph.title') }}</el-text>
+          <el-text type="info">{{ item.content.length }} {{ itemLabel || $t('views.paragraph.title') }}</el-text>
         </div>
         <div class="paragraph-list" v-if="activeName == index">
           <el-scrollbar>
@@ -36,12 +36,13 @@ defineProps({
   },
   isConnect: Boolean,
   knowledgeId: String,
+  itemLabel: String,
 })
 
 const activeName = ref(0)
 </script>
 <style scoped lang="scss">
 .paragraph-list {
-  height: calc(100vh - 319px);
+  min-height: calc(100vh - 319px);
 }
 </style>

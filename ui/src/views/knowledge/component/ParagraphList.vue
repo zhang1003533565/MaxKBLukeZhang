@@ -45,6 +45,46 @@
             style="background: none"
           />
         </div>
+        <div
+          v-if="isConnect && previewQuestionList(child).length"
+          class="related-preview mt-8"
+        >
+          <span class="related-preview__label">
+            {{ $t('views.paragraph.relatedProblem.previewTitle') }}
+          </span>
+          <el-tag
+            v-for="(problem, problemIndex) in previewQuestionList(child)"
+            :key="problemIndex"
+            size="small"
+            type="info"
+            effect="plain"
+            class="related-preview__tag"
+          >
+            <auto-tooltip :content="problem.content">
+              <span class="related-preview__tag-text">{{ problem.content }}</span>
+            </auto-tooltip>
+          </el-tag>
+        </div>
+        <div
+          v-if="isConnect && previewKeywordList(child).length"
+          class="related-preview mt-8"
+        >
+          <span class="related-preview__label">
+            {{ $t('views.paragraph.relatedProblem.keywordTitle') }}
+          </span>
+          <el-tag
+            v-for="(keyword, keywordIndex) in previewKeywordList(child)"
+            :key="keywordIndex"
+            size="small"
+            type="success"
+            effect="plain"
+            class="related-preview__tag"
+          >
+            <auto-tooltip :content="keyword.content">
+              <span class="related-preview__tag-text">{{ keyword.content }}</span>
+            </auto-tooltip>
+          </el-tag>
+        </div>
         <div class="lighter mt-12">
           <el-text type="info">
             {{ child.content.length }} {{ $t('views.paragraph.character_count') }}
@@ -75,6 +115,41 @@ const EditParagraphDialogRef = ref()
 const emit = defineEmits(['update:modelValue'])
 const loading = ref<boolean>(false)
 const localParagraphList = ref<any[]>([])
+const questionTextRegExp = /[？?]\s*$/
+const questionWordRegExp =
+  /(什么|啥|哪些|哪种|如何|怎么|怎样|为什么|为何|是否|能否|可否|可以|能不能|要不要|需要|应该|应当|谁|哪里|哪儿|何时|多久|多少|怎么办|咋办|吗|呢)/
+const previewQuestionPrefixRegExp =
+  /^(请问一下|请教一下|想了解一下|能否告诉我|请告诉我|请帮我|请帮忙|想请问|请问|请教|想了解|想知道|麻烦您|麻烦|烦请|劳烦|请您|帮忙|请)\s*/
+const previewQuestionSuffixRegExp = /(?:吗|呢|吧|呀|啊|么|嘛)+$/
+const previewNormalizeRegExp = /[\s\u3000，,。！？?!；;:："'“”‘’（）()【】\[\]<>《》·、]/g
+const markdownRegExp = /[#>*_`~\-[\]()+]/g
+const keywordSplitRegExp =
+  /[\s\u3000，,。！？?!；;:："'“”‘’（）()【】\[\]<>《》·、\n\r]+|以及|或者|并且|同时|根据|依据|依照|按照|应当|应该|需要|可以|不得|不能|进行|包括|适用于|制定|维护|保障|培养|提升|支持|引导|遵守|履行|取得|完成|参加|使用|申请/g
+const keywordAtomSplitRegExp = /[的之与和及]/g
+const keywordPatternRegExp =
+  /[\u4e00-\u9fa5A-Za-z0-9]{2,18}(?:规定|制度|办法|流程|原则|范围|条件|要求|义务|权利|依据|资格|手续|学籍|考试|考核|复学|休学|退学|转学|转专业|注册|处分|奖励|奖学金|章程|法律|学生|研究生|本科|专科)/g
+const fallbackKeywordStopwords = new Set([
+  '什么',
+  '哪些',
+  '怎么',
+  '如何',
+  '是否',
+  '可以',
+  '需要',
+  '应该',
+  '应当',
+  '不得',
+  '不能',
+  '进行',
+  '以及',
+  '或者',
+  '问题',
+  '答案',
+  '情况',
+  '内容',
+  '一下',
+  '请问',
+])
 
 const props = defineProps({
   modelValue: {
@@ -114,6 +189,159 @@ function cardLeave() {
   show.value = null
 }
 
+function normalizeProblemList(problemList: any[]): Array<{ content: string; kind?: string }> {
+  if (!Array.isArray(problemList)) {
+    return []
+  }
+  return problemList
+    .map((item) => {
+      if (typeof item === 'string') {
+        const content = item.trim()
+        return content ? { content } : null
+      }
+      if (!item || typeof item !== 'object') {
+        return null
+      }
+      const content = String(item.content || '').trim()
+      if (!content) {
+        return null
+      }
+      return {
+        content,
+        kind: item.kind,
+      }
+    })
+    .filter((item): item is { content: string; kind?: string } => Boolean(item))
+}
+
+function isQuestionText(content: string) {
+  return questionTextRegExp.test(content) || questionWordRegExp.test(content)
+}
+
+function previewProblemKey(content: string) {
+  return (content || '').trim()
+}
+
+function previewQuestionKey(content: string) {
+  let value = previewProblemKey(content).toLowerCase()
+  value = value.replace(previewNormalizeRegExp, '')
+  value = value.replace(previewQuestionPrefixRegExp, '')
+  value = value.replace(previewQuestionSuffixRegExp, '')
+  return value
+}
+
+function previewProblemList(
+  problemList: any[],
+  matcher: (item: any) => boolean,
+  limit: number,
+  keyGetter = previewProblemKey,
+): Array<{ content: string; kind?: string }> {
+  const seen = new Set<string>()
+  return normalizeProblemList(problemList)
+    .filter(matcher)
+    .filter((item) => {
+      const key = keyGetter(item.content)
+      if (!key || seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+    .slice(0, limit)
+}
+
+function getProblemList(child: any) {
+  return Array.isArray(child) ? child : child?.problem_list
+}
+
+function previewQuestionList(child: any) {
+  const explicitQuestions = previewProblemList(
+    (Array.isArray(child?.related_questions) ? child.related_questions : []).map(
+      (value: any) => ({
+        content: typeof value === 'string' ? value : value?.content,
+        kind: 'question',
+      }),
+    ),
+    () => true,
+    8,
+    previewQuestionKey,
+  )
+  const fallbackQuestions = previewProblemList(
+    getProblemList(child),
+    (item) => item.kind === 'question' || (!item.kind && isQuestionText(item.content)),
+    8,
+    previewQuestionKey,
+  )
+  return previewProblemList([...explicitQuestions, ...fallbackQuestions], () => true, 8)
+}
+
+function normalizeKeywordCandidate(content: string) {
+  const value = (content || '').replace(markdownRegExp, '').trim()
+  if (!value || fallbackKeywordStopwords.has(value) || isQuestionText(value)) {
+    return ''
+  }
+  if (!/[\u4e00-\u9fa5A-Za-z]/.test(value) || /^[\d\W_]+$/.test(value)) {
+    return ''
+  }
+  if (value.length < 2 || value.length > 12) {
+    return ''
+  }
+  return value
+}
+
+function fallbackKeywordList(child: any) {
+  if (Array.isArray(child)) {
+    return []
+  }
+  const text = `${child?.title || ''}\n${child?.content || ''}`.replace(markdownRegExp, ' ')
+  const candidates = [
+    ...(text.match(keywordPatternRegExp) || []),
+    ...text.split(keywordSplitRegExp),
+  ]
+  const expandedCandidates = candidates.flatMap((candidate) => [
+    candidate,
+    ...String(candidate || '')
+      .split(keywordAtomSplitRegExp)
+      .map((item) => item.trim()),
+  ])
+  const seen = new Set<string>()
+  const result: any[] = []
+  for (const candidate of expandedCandidates) {
+    const content = normalizeKeywordCandidate(candidate)
+    const key = previewProblemKey(content)
+    if (!content || !key || seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    result.push({ content, kind: 'keyword' })
+    if (result.length >= 8) {
+      break
+    }
+  }
+  return result
+}
+
+function previewKeywordList(child: any) {
+  const explicitKeywords = previewProblemList(
+    (Array.isArray(child?.keywords) ? child.keywords : []).map((value: any) => ({
+      content: typeof value === 'string' ? value : value?.content,
+      kind: 'keyword',
+    })),
+    () => true,
+    8,
+  )
+  const problemKeywords = previewProblemList(
+    getProblemList(child),
+    (item) => item.kind === 'keyword' || (!item.kind && !isQuestionText(item.content)),
+    8,
+  )
+  return previewProblemList(
+    [...explicitKeywords, ...problemKeywords, ...fallbackKeywordList(child)],
+    () => true,
+    8,
+  )
+}
+
 const next = () => {
   if (loading.value) return
   loading.value = true
@@ -139,6 +367,7 @@ const updateContent = (data: any) => {
   ) {
     data['problem_list'].push({
       content: data.title.trim(),
+      kind: 'question',
     })
   }
   new_value[currentCIndex.value] = cloneDeep(data)
@@ -181,6 +410,36 @@ const deleteHandle = (item: any, cIndex: number) => {
 <style lang="scss" scoped>
 .paragraph-preview-card {
   position: relative;
+
+  .related-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .related-preview__label {
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+  }
+
+  .related-preview__tag {
+    max-width: 100%;
+    height: auto;
+    align-items: flex-start;
+    white-space: normal;
+  }
+
+  .related-preview__tag-text {
+    display: inline;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    vertical-align: initial;
+    white-space: normal;
+    word-break: break-word;
+  }
+
   .mk-sticky {
     height: 0;
     position: sticky;

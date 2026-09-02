@@ -89,6 +89,45 @@
                     </div>
                   </el-card>
                 </el-card>
+                <el-card shadow="never" class="mb-16" :class="radio === '5' ? 'border-active' : ''">
+                  <el-radio value="5" size="large">
+                    <p class="mb-4">{{ $t('views.document.setRules.qa.label') }}</p>
+                    <el-text type="info">
+                      {{ $t('views.document.setRules.qa.text') }}
+                    </el-text>
+                  </el-radio>
+                  <div v-if="radio === '5'" class="model-select mt-16" style="margin-left: 30px">
+                    <div class="title mb-8">
+                      {{ $t('views.document.setRules.qaParseMode.label') }}
+                    </div>
+                    <el-select v-model="form.qa_parse_mode" class="w-full">
+                      <el-option
+                        v-for="item in qaParseModeOptions"
+                        :key="item.value"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                    <template v-if="qaNeedsTextModel">
+                      <div class="title mt-16 mb-8">
+                        {{ $t('views.document.setRules.model.qaLabel') }}
+                      </div>
+                      <ModelSelect
+                        v-model="activeModelId"
+                        :placeholder="$t('views.document.setRules.model.qaPlaceholder')"
+                        :options="llmModelOptions"
+                        @submitModel="getSelectModel('LLM')"
+                        showFooter
+                        :model-type="'LLM'"
+                      />
+                    </template>
+                    <el-switch
+                      v-model="form.quality_optimize"
+                      class="mt-16"
+                      :active-text="$t('views.document.setRules.quality.label')"
+                    />
+                  </div>
+                </el-card>
                 <el-card shadow="never" class="mb-16" :class="radio === '3' ? 'border-active' : ''">
                   <el-radio value="3" size="large">
                     <p class="mb-4">{{ $t('views.document.setRules.llmText.label') }}</p>
@@ -157,6 +196,7 @@
           </el-scrollbar>
           <div>
             <el-checkbox
+              v-if="!isQASplitMode"
               v-model="checkedConnect"
               @change="changeHandle"
               style="white-space: normal"
@@ -199,7 +239,12 @@
             :title="$t('views.document.setRules.quality.reportTitle')"
             :description="qualityReportText"
           />
-          <ParagraphPreview v-model:data="paragraphList" :isConnect="checkedConnect" :knowledge-id="id"/>
+          <ParagraphPreview
+            v-model:data="paragraphList"
+            :isConnect="preserveProblemList"
+            :knowledge-id="id"
+            :item-label="previewItemLabel"
+          />
         </div>
       </el-col>
     </el-row>
@@ -316,6 +361,7 @@ const form = reactive<{
   patterns: Array<string>
   limit: number
   with_filter: boolean
+  qa_parse_mode: string
   llm_model_id: string
   vision_model_id: string
   quality_optimize: boolean
@@ -324,10 +370,25 @@ const form = reactive<{
   patterns: [],
   limit: 500,
   with_filter: true,
+  qa_parse_mode: 'auto',
   llm_model_id: '',
   vision_model_id: '',
   quality_optimize: false,
 })
+const qaParseModeOptions = computed(() => [
+  {
+    label: t('views.document.setRules.qaParseMode.auto'),
+    value: 'auto',
+  },
+  {
+    label: t('views.document.setRules.qaParseMode.rule'),
+    value: 'rule',
+  },
+  {
+    label: t('views.document.setRules.qaParseMode.llm'),
+    value: 'llm',
+  },
+])
 const qualityReport = computed(() => {
   const reports = paragraphList.value.map((item) => item.quality_report).filter(Boolean)
   if (!reports.length) {
@@ -363,6 +424,9 @@ const qualityReportText = computed(() => {
 })
 
 const splitStrategy = computed(() => {
+  if (radio.value === '5') {
+    return 'qa'
+  }
   if (radio.value === '3') {
     return 'llm_text'
   }
@@ -370,6 +434,12 @@ const splitStrategy = computed(() => {
     return 'llm_vision'
   }
   return ''
+})
+const isQASplitMode = computed(() => radio.value === '5')
+const preserveProblemList = computed(() => checkedConnect.value || isQASplitMode.value)
+const previewItemLabel = computed(() => isQASplitMode.value ? t('views.document.setRules.qa.previewUnit') : '')
+const qaNeedsTextModel = computed(() => {
+  return isQASplitMode.value && (form.qa_parse_mode !== 'rule' || form.quality_optimize)
 })
 const activeModelId = computed({
   get: () => (radio.value === '4' ? form.vision_model_id : form.llm_model_id),
@@ -388,6 +458,9 @@ const previewDisabled = computed(() => {
   }
   if (radio.value === '3') {
     return !form.llm_model_id
+  }
+  if (radio.value === '5') {
+    return qaNeedsTextModel.value && !form.llm_model_id
   }
   if (radio.value === '4') {
     return !form.vision_model_id || !form.llm_model_id
@@ -429,6 +502,7 @@ function patchDraftConfig() {
       patterns: [...form.patterns],
       limit: form.limit,
       with_filter: form.with_filter,
+      qa_parse_mode: form.qa_parse_mode,
       llm_model_id: form.llm_model_id,
       vision_model_id: form.vision_model_id,
       quality_optimize: form.quality_optimize,
@@ -454,6 +528,7 @@ function applyDraft(draft: DocumentUploadDraft | null) {
   form.patterns = [...(draft.form?.patterns || [])]
   form.limit = draft.form?.limit || 500
   form.with_filter = draft.form?.with_filter ?? true
+  form.qa_parse_mode = draft.form?.qa_parse_mode || 'auto'
   form.llm_model_id = draft.form?.llm_model_id || ''
   form.vision_model_id = draft.form?.vision_model_id || ''
   form.quality_optimize = draft.form?.quality_optimize ?? false
@@ -506,10 +581,12 @@ function pollSplitTask(backendTaskId: string, taskId: string) {
       }
       if (task.status === 'failed') {
         loading.value = false
+        paragraphList.value = []
         knowledge.patchDocumentUploadDraft({
           status: 'failed',
           stage: 'failed',
           message: task.error || task.message || t('views.document.setRules.progress.failed'),
+          paragraphList: [],
         })
         return
       }
@@ -549,9 +626,11 @@ function pollSplitTask(backendTaskId: string, taskId: string) {
         return
       }
       loading.value = false
+      paragraphList.value = []
       knowledge.patchDocumentUploadDraft({
         status: 'failed',
         message: t('views.document.setRules.progress.expired'),
+        paragraphList: [],
       })
     })
 }
@@ -606,7 +685,7 @@ function postParagraphList(list: any[]) {
     if (item.name.length > 128) {
       item.name = cutFilename(item.name, 128)
     }
-    if (checkedConnect.value) {
+    if (checkedConnect.value && !isQASplitMode.value) {
       item.content.map((v: any) => {
         v['problem_list'] = v.title.trim()
           ? [
@@ -628,6 +707,7 @@ function splitDocument() {
   loading.value = true
   stopPolling()
   pollingFailureCount = 0
+  paragraphList.value = []
   const fd = new FormData()
   const uploadFiles = documentsFiles.value.filter((item) => item?.raw)
   const totalSize = uploadFiles.reduce((sum, item) => sum + (item.size || item.raw?.size || 0), 0)
@@ -647,13 +727,20 @@ function splitDocument() {
   }
   if (splitStrategy.value) {
     fd.append('split_strategy', splitStrategy.value)
-    if (splitStrategy.value === 'llm_text') {
+    if (splitStrategy.value === 'qa') {
+      fd.append('qa_parse_mode', form.qa_parse_mode)
+      if (qaNeedsTextModel.value) {
+        fd.append('model_id', form.llm_model_id)
+      }
+    } else if (splitStrategy.value === 'llm_text') {
       fd.append('model_id', form.llm_model_id)
-    } else {
+    } else if (splitStrategy.value === 'llm_vision') {
       fd.append('vision_model_id', form.vision_model_id)
       fd.append('llm_model_id', form.llm_model_id)
     }
-    fd.append('quality_optimize', String(form.quality_optimize))
+    if (['qa', 'llm_text', 'llm_vision'].includes(splitStrategy.value)) {
+      fd.append('quality_optimize', String(form.quality_optimize))
+    }
   }
 
   const taskId = `${Date.now()}-${Math.random()}`
@@ -684,6 +771,7 @@ function splitDocument() {
       patterns: [...form.patterns],
       limit: form.limit,
       with_filter: form.with_filter,
+      qa_parse_mode: form.qa_parse_mode,
       llm_model_id: form.llm_model_id,
       vision_model_id: form.vision_model_id,
       quality_optimize: form.quality_optimize,
@@ -723,10 +811,12 @@ function splitDocument() {
     })
     .catch(() => {
       loading.value = false
+      paragraphList.value = []
       patchCurrentDraft({
         status: 'failed',
         progress: draftProgress.value,
         message: t('views.document.setRules.progress.failed'),
+        paragraphList: [],
       })
     })
     : documentApi.postSplitDocument(id, fd, onUploadProgress).then((res: any) => {
@@ -744,9 +834,11 @@ function splitDocument() {
       })
     }).catch(() => {
       loading.value = false
+      paragraphList.value = []
       patchCurrentDraft({
         status: 'failed',
         message: t('views.document.setRules.progress.failed'),
+        paragraphList: [],
       })
     })
 
@@ -775,7 +867,7 @@ function getSelectModel(modelType: 'LLM' | 'IMAGE') {
 }
 
 function initModelOptions() {
-  if (radio.value === '3') {
+  if (['3', '5'].includes(radio.value)) {
     getSelectModel('LLM')
   }
   if (radio.value === '4') {
@@ -793,7 +885,7 @@ watch(radio, () => {
 })
 
 watch(
-  () => [form.llm_model_id, form.vision_model_id],
+  () => [form.llm_model_id, form.vision_model_id, form.qa_parse_mode, form.quality_optimize],
   () => patchDraftConfig(),
 )
 
@@ -832,9 +924,14 @@ onBeforeUnmount(() => {
   stopPolling()
 })
 
+function shouldPreserveProblemList() {
+  return preserveProblemList.value
+}
+
 defineExpose({
   paragraphList,
   checkedConnect,
+  shouldPreserveProblemList,
   loading,
   canImport,
 })
